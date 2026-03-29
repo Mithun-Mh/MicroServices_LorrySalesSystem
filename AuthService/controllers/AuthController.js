@@ -2,6 +2,32 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
+/**
+ * @swagger
+ * /register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [admin, rep, staff]
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *       400:
+ *         description: User already exists
+ */
 exports.register = async (req, res) => {
     try {
         const { email, password, role } = req.body;
@@ -16,6 +42,38 @@ exports.register = async (req, res) => {
     }
 };
 
+/**
+ * @swagger
+ * /login:
+ *   post:
+ *     summary: Log in to the system
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                 role:
+ *                   type: string
+ *       401:
+ *         description: Invalid credentials
+ */
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -37,6 +95,20 @@ exports.login = async (req, res) => {
     }
 };
 
+/**
+ * @swagger
+ * /verify:
+ *   get:
+ *     summary: Verify JWT token
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Token is valid
+ *       401:
+ *         description: Invalid or missing token
+ */
 exports.verify = async (req, res) => {
     const token = req.headers['authorization']?.split(' ')[1];
     if (!token) return res.status(401).json({ message: 'No token provided' });
@@ -48,3 +120,4 @@ exports.verify = async (req, res) => {
         res.status(401).json({ message: 'Token is invalid' });
     }
 };
+
