@@ -12,7 +12,7 @@ const port = 5005;
 app.use(express.json());
 
 // MongoDB Connection
-const mongoUrl = process.env.MONGO_URI || 'mongodb://localhost:27017/finance_db';
+const mongoUrl = process.env.MONGO_URI || 'mongodb://localhost:27017/lorry_system';
 mongoose.connect(mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('Connected to MongoDB - Finance Service'))
     .catch(err => console.error('MongoDB connection error:', err));

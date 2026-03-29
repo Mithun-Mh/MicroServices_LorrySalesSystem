@@ -19,7 +19,7 @@ services:
     ports:
       - "5001:5001"
     environment:
-      - MONGO_URI=mongodb://mongo:27017/inventory_db
+      - MONGO_URI=mongodb://mongo:27017/lorry_system
     depends_on:
       - mongo
     networks:
@@ -30,7 +30,7 @@ services:
     ports:
       - "5002:5002"
     environment:
-      - MONGO_URI=mongodb://mongo:27017/fleet_db
+      - MONGO_URI=mongodb://mongo:27017/lorry_system
     depends_on:
       - mongo
     networks:
@@ -41,7 +41,7 @@ services:
     ports:
       - "5003:5003"
     environment:
-      - MONGO_URI=mongodb://mongo:27017/customer_db
+      - MONGO_URI=mongodb://mongo:27017/lorry_system
     depends_on:
       - mongo
     networks:
@@ -52,7 +52,7 @@ services:
     ports:
       - "5004:5004"
     environment:
-      - MONGO_URI=mongodb://mongo:27017/sales_db
+      - MONGO_URI=mongodb://mongo:27017/lorry_system
     depends_on:
       - mongo
     networks:
@@ -63,7 +63,7 @@ services:
     ports:
       - "5005:5005"
     environment:
-      - MONGO_URI=mongodb://mongo:27017/finance_db
+      - MONGO_URI=mongodb://mongo:27017/lorry_system
     depends_on:
       - mongo
     networks:
