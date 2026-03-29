@@ -1,5 +1,7 @@
 const Lorry = require('../models/Lorry');
 const LorryStock = require('../models/LorryStock');
+const StockTransfer = require('../models/StockTransfer');
+const LorrySale = require('../models/LorrySale');
 
 /**
  * @swagger
@@ -7,42 +9,79 @@ const LorryStock = require('../models/LorryStock');
  *   schemas:
  *     Lorry:
  *       type: object
- *       required: [lorryId, licensePlate, assignedRep]
+ *       required: [lorry_id, vehicle_number, rep_id]
  *       properties:
- *         lorryId:
+ *         lorry_id:
  *           type: string
  *           example: "LH3490"
- *         licensePlate:
+ *         vehicle_number:
  *           type: string
- *           example: "WP-AB-1234"
- *         assignedRep:
+ *           example: "LH3490"
+ *         rep_id:
  *           type: string
- *           example: "Kamal Perera"
+ *           example: "REP-1001"
  *         status:
  *           type: string
  *           enum: [Active, Inactive, OnRoute]
  *     LorryStock:
  *       type: object
- *       required: [lorryId, productId, productName, quantityLoaded]
+ *       required: [lorry_id, product_id, quantity]
  *       properties:
- *         lorryId:
+ *         lorry_id:
  *           type: string
  *           example: "LH3490"
- *         productId:
+ *         product_id:
  *           type: string
  *           example: "665a1b2c3d4e5f6a7b8c9d0e"
- *         productName:
- *           type: string
- *           example: "Men's Cotton Shirt"
- *         quantityLoaded:
+ *         quantity:
  *           type: number
  *           example: 100
- *         quantitySold:
+ *     StockTransfer:
+ *       type: object
+ *       required: [lorry_id, product_id, quantity]
+ *       properties:
+ *         transfer_id:
+ *           type: string
+ *           example: "TR-1711785600000-1001"
+ *         lorry_id:
+ *           type: string
+ *           example: "LH3490"
+ *         product_id:
+ *           type: string
+ *           example: "665a1b2c3d4e5f6a7b8c9d0e"
+ *         quantity:
  *           type: number
- *           example: 0
- *         quantityReturned:
+ *           example: 40
+ *         status:
+ *           type: string
+ *           enum: [pending, approved]
+ *         date:
+ *           type: string
+ *           format: date-time
+ *     LorrySale:
+ *       type: object
+ *       required: [lorry_id, product_id, product_name, quantity, retail_price, whole_price, total, name]
+ *       properties:
+ *         lorry_id:
+ *           type: string
+ *         product_id:
+ *           type: string
+ *         product_name:
+ *           type: string
+ *         quantity:
  *           type: number
- *           example: 0
+ *         retail_price:
+ *           type: number
+ *         whole_price:
+ *           type: number
+ *         total:
+ *           type: number
+ *         cash_amount:
+ *           type: number
+ *         credit_amount:
+ *           type: number
+ *         name:
+ *           type: string
  */
 
 // ─── LORRY CRUD ─────────────────────────────────────────────
@@ -84,7 +123,13 @@ exports.getAllLorries = async (req, res) => {
  */
 exports.createLorry = async (req, res) => {
     try {
-        const lorry = new Lorry(req.body);
+        const payload = {
+            lorry_id: req.body.lorry_id || req.body.lorryId,
+            vehicle_number: req.body.vehicle_number || req.body.vehicleNumber || req.body.licensePlate,
+            rep_id: req.body.rep_id || req.body.repId || req.body.assignedRep,
+            status: req.body.status
+        };
+        const lorry = new Lorry(payload);
         const saved = await lorry.save();
         res.status(201).json(saved);
     } catch (err) {
@@ -116,7 +161,17 @@ exports.createLorry = async (req, res) => {
  */
 exports.updateLorry = async (req, res) => {
     try {
-        const updated = await Lorry.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const payload = {
+            ...(req.body.lorry_id || req.body.lorryId ? { lorry_id: req.body.lorry_id || req.body.lorryId } : {}),
+            ...(req.body.vehicle_number || req.body.vehicleNumber || req.body.licensePlate ? {
+                vehicle_number: req.body.vehicle_number || req.body.vehicleNumber || req.body.licensePlate
+            } : {}),
+            ...(req.body.rep_id || req.body.repId || req.body.assignedRep ? {
+                rep_id: req.body.rep_id || req.body.repId || req.body.assignedRep
+            } : {}),
+            ...(req.body.status ? { status: req.body.status } : {})
+        };
+        const updated = await Lorry.findByIdAndUpdate(req.params.id, payload, { new: true });
         if (!updated) return res.status(404).json({ message: 'Lorry not found' });
         res.json(updated);
     } catch (err) {
@@ -170,9 +225,28 @@ exports.deleteLorry = async (req, res) => {
  */
 exports.loadStock = async (req, res) => {
     try {
-        const stock = new LorryStock(req.body);
-        const saved = await stock.save();
-        res.status(201).json(saved);
+        const lorryId = req.body.lorry_id || req.body.lorryId;
+        const productId = req.body.product_id || req.body.productId;
+        const quantity = Number(req.body.quantity || req.body.quantityLoaded || 0);
+
+        if (!lorryId || !productId) {
+            return res.status(400).json({ message: 'lorry_id and product_id are required' });
+        }
+
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+            return res.status(400).json({ message: 'quantity must be a positive number' });
+        }
+
+        const updated = await LorryStock.findOneAndUpdate(
+            { lorry_id: lorryId, product_id: productId },
+            { $inc: { quantity } },
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+        );
+
+        res.status(201).json({
+            message: 'Stock loaded successfully',
+            stock: updated
+        });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
@@ -196,7 +270,7 @@ exports.loadStock = async (req, res) => {
  */
 exports.getStockByLorry = async (req, res) => {
     try {
-        const stock = await LorryStock.find({ lorryId: req.params.lorryId });
+        const stock = await LorryStock.find({ lorry_id: req.params.lorryId });
         res.json(stock);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -233,10 +307,256 @@ exports.returnStock = async (req, res) => {
     try {
         const stock = await LorryStock.findById(req.params.id);
         if (!stock) return res.status(404).json({ message: 'Stock record not found' });
-        stock.quantityReturned = req.body.quantityReturned;
+
+        const returnedQty = Number(req.body.quantityReturned || 0);
+        if (returnedQty < 0) {
+            return res.status(400).json({ message: 'quantityReturned must be positive' });
+        }
+        if (returnedQty > stock.quantity) {
+            return res.status(400).json({ message: 'Returned quantity exceeds stock quantity' });
+        }
+
+        stock.quantity -= returnedQty;
         await stock.save();
-        res.json({ message: 'Return recorded', stock });
+        res.json({ message: 'Return recorded', remainingQuantity: stock.quantity, stock });
     } catch (err) {
         res.status(400).json({ error: err.message });
+    }
+};
+
+// ─── STOCK TRANSFER ────────────────────────────────────────
+
+/**
+ * @swagger
+ * /stock-transfers:
+ *   post:
+ *     summary: Create stock transfer request
+ *     tags: [StockTransfer]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StockTransfer'
+ *     responses:
+ *       201:
+ *         description: Stock transfer created
+ *   get:
+ *     summary: Get all stock transfers
+ *     tags: [StockTransfer]
+ *     responses:
+ *       200:
+ *         description: Stock transfers list
+ */
+exports.createStockTransfer = async (req, res) => {
+    try {
+        const transfer = new StockTransfer({
+            lorry_id: req.body.lorry_id || req.body.lorryId,
+            product_id: req.body.product_id || req.body.productId,
+            quantity: req.body.quantity,
+            status: req.body.status,
+            date: req.body.date
+        });
+        const saved = await transfer.save();
+        res.status(201).json(saved);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+
+exports.getAllStockTransfers = async (req, res) => {
+    try {
+        const transfers = await StockTransfer.find().sort({ createdAt: -1 });
+        res.json(transfers);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * @swagger
+ * /stock-transfers/{transferId}:
+ *   get:
+ *     summary: Get a stock transfer by transfer_id
+ *     tags: [StockTransfer]
+ *     parameters:
+ *       - in: path
+ *         name: transferId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Stock transfer details
+ */
+exports.getStockTransferByTransferId = async (req, res) => {
+    try {
+        const transfer = await StockTransfer.findOne({ transfer_id: req.params.transferId });
+        if (!transfer) return res.status(404).json({ message: 'Stock transfer not found' });
+        res.json(transfer);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * @swagger
+ * /stock-transfers/{transferId}/status:
+ *   put:
+ *     summary: Update stock transfer status
+ *     tags: [StockTransfer]
+ *     parameters:
+ *       - in: path
+ *         name: transferId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, approved]
+ *     responses:
+ *       200:
+ *         description: Stock transfer status updated
+ */
+exports.updateStockTransferStatus = async (req, res) => {
+    try {
+        const updated = await StockTransfer.findOneAndUpdate(
+            { transfer_id: req.params.transferId },
+            { status: req.body.status },
+            { new: true }
+        );
+        if (!updated) return res.status(404).json({ message: 'Stock transfer not found' });
+        res.json(updated);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+
+// ─── LORRY SALE ────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /lorry-sales:
+ *   post:
+ *     summary: Create lorry sale record
+ *     tags: [LorrySale]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LorrySale'
+ *     responses:
+ *       201:
+ *         description: Lorry sale created
+ *   get:
+ *     summary: Get all lorry sale records
+ *     tags: [LorrySale]
+ *     responses:
+ *       200:
+ *         description: Lorry sales list
+ */
+exports.createLorrySale = async (req, res) => {
+    try {
+        const lorryId = req.body.lorry_id || req.body.lorryId;
+        const productId = req.body.product_id || req.body.productId;
+        const quantity = Number(req.body.quantity || 0);
+
+        if (!lorryId) {
+            return res.status(400).json({ message: 'lorry_id is required' });
+        }
+        if (!productId) {
+            return res.status(400).json({ message: 'product_id is required' });
+        }
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+            return res.status(400).json({ message: 'quantity must be a positive number' });
+        }
+
+        const stock = await LorryStock.findOne({ lorry_id: lorryId, product_id: productId });
+        if (!stock) {
+            return res.status(400).json({
+                message: `Product ${productId} is not available in lorry ${lorryId} stock`
+            });
+        }
+
+        if (quantity > stock.quantity) {
+            return res.status(400).json({
+                message: `Insufficient stock. Available quantity for product ${productId} in lorry ${lorryId} is ${stock.quantity}`
+            });
+        }
+
+        const retailPrice = Number(req.body.retail_price || req.body.retailPrice || 0);
+        const wholePrice = Number(req.body.whole_price || req.body.wholePrice || 0);
+        const total = req.body.total || quantity * retailPrice;
+
+        const sale = new LorrySale({
+            lorry_id: lorryId,
+            product_id: productId,
+            product_name: req.body.product_name || req.body.productName,
+            quantity,
+            retail_price: retailPrice,
+            whole_price: wholePrice,
+            total,
+            cash_amount: req.body.cash_amount || req.body.cashAmount || 0,
+            credit_amount: req.body.credit_amount || req.body.creditAmount || 0,
+            name: req.body.name
+        });
+
+        if (!sale.product_name) {
+            return res.status(400).json({ message: 'product_name is required' });
+        }
+
+        stock.quantity -= quantity;
+        await stock.save();
+
+        const saved = await sale.save();
+        res.status(201).json({
+            message: 'Lorry sale created',
+            sale: saved,
+            remainingStock: stock.quantity
+        });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+
+exports.getAllLorrySales = async (req, res) => {
+    try {
+        const sales = await LorrySale.find().sort({ createdAt: -1 });
+        res.json(sales);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * @swagger
+ * /lorry-sales/product/{productId}:
+ *   get:
+ *     summary: Get lorry sales by product_id
+ *     tags: [LorrySale]
+ *     parameters:
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Lorry sales for product
+ */
+exports.getLorrySalesByProduct = async (req, res) => {
+    try {
+        const sales = await LorrySale.find({ product_id: req.params.productId }).sort({ createdAt: -1 });
+        res.json(sales);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 };

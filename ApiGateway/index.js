@@ -424,6 +424,74 @@ app.use(express.json());
 
 /**
  * @swagger
+ * /fleet/lorry-sales:
+ *   post:
+ *     summary: Create lorry sale record
+ *     tags: [Fleet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [lorry_id, product_id, product_name, quantity, retail_price, whole_price, total, name]
+ *             properties:
+ *               lorry_id:
+ *                 type: string
+ *               product_id:
+ *                 type: string
+ *               product_name:
+ *                 type: string
+ *               quantity:
+ *                 type: number
+ *               retail_price:
+ *                 type: number
+ *               whole_price:
+ *                 type: number
+ *               total:
+ *                 type: number
+ *               cash_amount:
+ *                 type: number
+ *               credit_amount:
+ *                 type: number
+ *               name:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Lorry sale created
+ *   get:
+ *     summary: Get all lorry sales
+ *     tags: [Fleet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lorry sales list
+ */
+
+/**
+ * @swagger
+ * /fleet/lorry-sales/product/{productId}:
+ *   get:
+ *     summary: Get lorry sales by product ID
+ *     tags: [Fleet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Lorry sales for product
+ */
+
+/**
+ * @swagger
  * /customer/status:
  *   get:
  *     summary: Customer service health status
