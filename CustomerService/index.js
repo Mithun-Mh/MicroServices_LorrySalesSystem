@@ -51,6 +51,10 @@ app.post('/credit-limits', customerController.setCreditLimit);
 app.get('/credit-limits/:customerId', customerController.getCreditLimit);
 app.put('/credit-limits/:customerId', customerController.updateCreditLimit);
 
+// ─── PAYMENT HISTORY ROUTES ─────────────────────────────────
+app.post('/payment-history', customerController.addPaymentHistory);
+app.get('/payment-history/:customerId', customerController.getPaymentHistory);
+
 app.listen(port, () => {
     console.log(`Customer Service running on port ${port}`);
 });

@@ -1,5 +1,6 @@
 const Customer = require('../models/Customer');
 const CreditLimit = require('../models/CreditLimit');
+const PaymentHistory = require('../models/PaymentHistory');
 
 /**
  * @swagger
@@ -41,6 +42,18 @@ const CreditLimit = require('../models/CreditLimit');
  *         currentBalance:
  *           type: number
  *           example: 12000
+ *     PaymentHistory:
+ *       type: object
+ *       required: [customerId, amount]
+ *       properties:
+ *         customerId:
+ *           type: string
+ *         amount:
+ *           type: number
+ *           example: 5000
+ *         date:
+ *           type: string
+ *           format: date-time
  */
 
 // ─── CUSTOMER CRUD ──────────────────────────────────────────
@@ -266,5 +279,58 @@ exports.updateCreditLimit = async (req, res) => {
         res.json(updated);
     } catch (err) {
         res.status(400).json({ error: err.message });
+    }
+};
+
+// ─── PAYMENT HISTORY ────────────────────────────────────────
+
+/**
+ * @swagger
+ * /payment-history:
+ *   post:
+ *     summary: Add a new payment history record for a customer
+ *     tags: [PaymentHistory]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/PaymentHistory'
+ *     responses:
+ *       201:
+ *         description: Payment history created
+ */
+exports.addPaymentHistory = async (req, res) => {
+    try {
+        const payment = new PaymentHistory(req.body);
+        const saved = await payment.save();
+        res.status(201).json(saved);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+
+/**
+ * @swagger
+ * /payment-history/{customerId}:
+ *   get:
+ *     summary: Get payment history for a specific customer
+ *     tags: [PaymentHistory]
+ *     parameters:
+ *       - in: path
+ *         name: customerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of payment histories
+ */
+exports.getPaymentHistory = async (req, res) => {
+    try {
+        const history = await PaymentHistory.find({ customerId: req.params.customerId }).sort({ date: -1 });
+        res.json(history);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 };
