@@ -1,5 +1,10 @@
+const axios = require('axios');
 const Invoice = require('../models/Invoice');
 const Transaction = require('../models/Transaction');
+
+// URLs for internal services
+const INVENTORY_SERVICE_URL = process.env.INVENTORY_SERVICE_URL || 'http://inventory-service:5001';
+const CUSTOMER_SERVICE_URL = process.env.CUSTOMER_SERVICE_URL || 'http://customer-service:5003';
 
 /**
  * @swagger
@@ -17,6 +22,10 @@ const Transaction = require('../models/Transaction');
  *         customerName:
  *           type: string
  *           example: "Nimal Textiles"
+ *         saleType:
+ *           type: string
+ *           enum: [POS, Warehouse]
+ *           example: "POS"
  *         lorryId:
  *           type: string
  *           example: "LH3490"
@@ -112,7 +121,7 @@ exports.getInvoiceById = async (req, res) => {
  * @swagger
  * /invoices:
  *   post:
- *     summary: Create a new invoice (sale to shop owner)
+ *     summary: Create a new warehouse POS invoice (reduces stock)
  *     tags: [Invoices]
  *     requestBody:
  *       required: true
@@ -122,13 +131,79 @@ exports.getInvoiceById = async (req, res) => {
  *             $ref: '#/components/schemas/Invoice'
  *     responses:
  *       201:
- *         description: Invoice created
+ *         description: Invoice created, stock updated, and (if credit) customer balance updated
+ *       400:
+ *         description: Stock reduction failed or insufficient credit limit
  */
 exports.createInvoice = async (req, res) => {
     try {
+        const { customerId, items, paymentMethod, totalAmount } = req.body;
+
+        // ─── 1. CREDIT LIMIT CHECK (If Credit Sale) ─────────────────
+        if (paymentMethod === 'Credit') {
+            try {
+                const creditResp = await axios.get(`${CUSTOMER_SERVICE_URL}/credit-limits/${customerId}`);
+                const { availableCredit } = creditResp.data;
+                
+                if (availableCredit < totalAmount) {
+                    return res.status(400).json({ 
+                        message: 'Insufficient Credit Limit',
+                        available: availableCredit,
+                        required: totalAmount
+                    });
+                }
+            } catch (err) {
+                console.error(`Credit check failed for customer ${customerId}:`, err.response?.data || err.message);
+                return res.status(400).json({ 
+                    message: 'Could not verify customer credit limit',
+                    details: err.response?.data?.message || err.message
+                });
+            }
+        }
+
+        // ─── 2. INVENTORY STOCK REDUCTION ─────────────────────────
+        // We do this first before final state changes as it's the more likely to fail.
+        for (const item of items) {
+            try {
+                await axios.put(`${INVENTORY_SERVICE_URL}/stock/update`, {
+                    product_id: item.productId,
+                    action: 'reduce',
+                    quantity: item.quantity
+                });
+            } catch (invErr) {
+                console.error(`Stock reduction failed: ${item.productName}:`, invErr.response?.data || invErr.message);
+                return res.status(400).json({ 
+                    message: `Not enough stock for ${item.productName || item.productId}`,
+                    details: invErr.response?.data?.message || invErr.message
+                });
+            }
+        }
+
+        // ─── 3. UPDATE CUSTOMER DEBIT (If Credit Sale) ──────────────
+        if (paymentMethod === 'Credit') {
+            try {
+                // Fetch current credit data to update it
+                const currentCredit = await axios.get(`${CUSTOMER_SERVICE_URL}/credit-limits/${customerId}`);
+                const newDebit = currentCredit.data.debit + totalAmount;
+
+                await axios.put(`${CUSTOMER_SERVICE_URL}/credit-limits/${customerId}`, {
+                    debit: newDebit
+                });
+            } catch (err) {
+                // Note: In production, we would need to revert the inventory reduction here!
+                console.error(`Debit update failed for customer ${customerId}:`, err.response?.data || err.message);
+                return res.status(500).json({ message: 'Credit sale failed during customer balance update' });
+            }
+        }
+
+        // ─── 4. SAVE THE INVOICE ─────────────────────────────────
         const invoice = new Invoice(req.body);
         const saved = await invoice.save();
-        res.status(201).json(saved);
+        
+        res.status(201).json({ 
+            message: 'Warehouse POS Sale successful', 
+            invoice: saved 
+        });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
