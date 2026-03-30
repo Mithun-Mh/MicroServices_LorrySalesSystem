@@ -568,6 +568,26 @@ exports.createLorrySale = async (req, res) => {
         await stock.save();
 
         const saved = await sale.save();
+
+        // ─── Automate update to Customer CreditLimit ───
+        try {
+            const customerUrl = process.env.CUSTOMER_SERVICE_URL || 'http://localhost:5003';
+            const response = await fetch(`${customerUrl}/credit-limits/${phoneNumber}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cashAmount: saved.cash_amount,
+                    creditAmount: saved.credit_amount
+                })
+            });
+
+            if (!response.ok) {
+                console.error(`Warning: Customer Service responded with status ${response.status} when updating LorrySale limit`);
+            }
+        } catch (serviceErr) {
+            console.error('Error communicating with Customer Service for Lorry sale credit update:', serviceErr.message);
+        }
+
         res.status(201).json({
             message: 'Lorry sale created',
             sale: saved,
