@@ -412,7 +412,7 @@ app.use(express.json());
  * @swagger
  * /fleet/lorry-stock:
  *   post:
- *     summary: Load stock to a lorry
+ *     summary: Load stock to a lorry (validated against inventory warehouse stock)
  *     tags: [Fleet]
  *     security:
  *       - bearerAuth: []
@@ -422,7 +422,7 @@ app.use(express.json());
  *         application/json:
  *           schema:
  *             type: object
- *             required: [lorryId, productId, productName, quantityLoaded]
+ *             required: [lorryId, productId, quantityLoaded]
  *             properties:
  *               lorryId:
  *                 type: string
@@ -503,7 +503,7 @@ app.use(express.json());
  *         application/json:
  *           schema:
  *             type: object
- *             required: [lorry_id, phone_number, product_id, product_name, quantity, retail_price, whole_price, total]
+ *             required: [lorry_id, phone_number, product_id, quantity, cash_amount, credit_amount]
  *             properties:
  *               lorry_id:
  *                 type: string
@@ -513,12 +513,14 @@ app.use(express.json());
  *                 type: string
  *               quantity:
  *                 type: number
- *               retail_price:
- *                 type: number
  *               whole_price:
  *                 type: number
+ *                 readOnly: true
+ *                 description: Auto-filled from Inventory product wholesale_price
  *               total:
  *                 type: number
+ *                 readOnly: true
+ *                 description: Auto-calculated as whole_price * quantity
  *               cash_amount:
  *                 type: number
  *               credit_amount:
@@ -528,6 +530,41 @@ app.use(express.json());
  *     responses:
  *       201:
  *         description: Lorry sale created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Lorry sale created
+ *                 sale:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                     lorry_id:
+ *                       type: string
+ *                     product_id:
+ *                       type: string
+ *                     product_name:
+ *                       type: string
+ *                     quantity:
+ *                       type: number
+ *                     whole_price:
+ *                       type: number
+ *                       example: 3000
+ *                     total:
+ *                       type: number
+ *                       example: 6000
+ *                     cash_amount:
+ *                       type: number
+ *                     credit_amount:
+ *                       type: number
+ *                     phone_number:
+ *                       type: string
+ *                 remainingStock:
+ *                   type: number
  *   get:
  *     summary: Get all lorry sales
  *     tags: [Fleet]

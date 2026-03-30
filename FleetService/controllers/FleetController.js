@@ -4,8 +4,42 @@ const StockTransfer = require('../models/StockTransfer');
 const LorrySale = require('../models/LorrySale');
 
 const CUSTOMER_SERVICE_URL = process.env.CUSTOMER_SERVICE_URL || 'http://customer-service:5003';
+const INVENTORY_SERVICE_URL = process.env.INVENTORY_SERVICE_URL || 'http://inventory-service:5001';
 
 const normalizePhone = (value) => String(value || '').replace(/\s+/g, '').trim();
+
+const toNumber = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : NaN;
+};
+
+const getInventoryProductById = async (productId) => {
+    const response = await fetch(`${INVENTORY_SERVICE_URL}/products/${encodeURIComponent(productId)}`);
+    if (response.status === 404) {
+        return null;
+    }
+    if (!response.ok) {
+        throw new Error(`Unable to verify product. Inventory Service responded with ${response.status}`);
+    }
+    return response.json();
+};
+
+const getWarehouseStockByProductId = async (productId) => {
+    const response = await fetch(`${INVENTORY_SERVICE_URL}/stock`);
+    if (!response.ok) {
+        throw new Error(`Unable to verify warehouse stock. Inventory Service responded with ${response.status}`);
+    }
+
+    const stockList = await response.json();
+    if (!Array.isArray(stockList)) {
+        return null;
+    }
+
+    return stockList.find((item) => {
+        const stockProductId = item?.product_id?._id || item?.product_id;
+        return String(stockProductId) === String(productId);
+    }) || null;
+};
 
 const getCustomerByPhoneNumber = async (phoneNumber) => {
     const normalizedPhone = normalizePhone(phoneNumber);
@@ -88,7 +122,7 @@ const getCustomerByPhoneNumber = async (phoneNumber) => {
  *           format: date-time
  *     LorrySale:
  *       type: object
- *       required: [lorry_id, phone_number, product_id, product_name, quantity, retail_price, whole_price, total]
+ *       required: [lorry_id, phone_number, product_id, quantity, cash_amount, credit_amount]
  *       properties:
  *         lorry_id:
  *           type: string
@@ -98,12 +132,12 @@ const getCustomerByPhoneNumber = async (phoneNumber) => {
  *           type: string
  *         quantity:
  *           type: number
- *         retail_price:
- *           type: number
  *         whole_price:
  *           type: number
+ *           description: Auto-filled from Inventory product wholesale_price
  *         total:
  *           type: number
+ *           description: Auto-calculated as whole_price * quantity
  *         cash_amount:
  *           type: number
  *         credit_amount:
@@ -255,7 +289,7 @@ exports.loadStock = async (req, res) => {
     try {
         const lorryId = req.body.lorry_id || req.body.lorryId;
         const productId = req.body.product_id || req.body.productId;
-        const quantity = Number(req.body.quantity || req.body.quantityLoaded || 0);
+        const quantity = toNumber(req.body.quantity || req.body.quantityLoaded || 0);
 
         if (!lorryId || !productId) {
             return res.status(400).json({ message: 'lorry_id and product_id are required' });
@@ -263,6 +297,24 @@ exports.loadStock = async (req, res) => {
 
         if (!Number.isFinite(quantity) || quantity <= 0) {
             return res.status(400).json({ message: 'quantity must be a positive number' });
+        }
+
+        const warehouseStock = await getWarehouseStockByProductId(productId);
+        if (!warehouseStock) {
+            return res.status(404).json({
+                message: `Product ${productId} was not found in Inventory warehouse stock`
+            });
+        }
+
+        const warehouseQuantity = toNumber(warehouseStock.quantity || 0);
+        const existingLorryStock = await LorryStock.findOne({ lorry_id: lorryId, product_id: productId });
+        const currentLorryQuantity = existingLorryStock?.quantity || 0;
+        const updatedLorryQuantity = currentLorryQuantity + quantity;
+
+        if (updatedLorryQuantity > warehouseQuantity) {
+            return res.status(400).json({
+                message: `Lorry stock cannot exceed warehouse quantity for product ${productId}. Warehouse quantity: ${warehouseQuantity}, requested lorry quantity: ${updatedLorryQuantity}`
+            });
         }
 
         const updated = await LorryStock.findOneAndUpdate(
@@ -496,7 +548,7 @@ exports.createLorrySale = async (req, res) => {
         const lorryId = req.body.lorry_id || req.body.lorryId;
         const phoneNumberInput = req.body.phone_number || req.body.phoneNumber;
         const productId = req.body.product_id || req.body.productId;
-        const quantity = Number(req.body.quantity || 0);
+        const quantity = toNumber(req.body.quantity || 0);
 
         if (!lorryId) {
             return res.status(400).json({ message: 'lorry_id is required' });
@@ -509,6 +561,37 @@ exports.createLorrySale = async (req, res) => {
         }
         if (!Number.isFinite(quantity) || quantity <= 0) {
             return res.status(400).json({ message: 'quantity must be a positive number' });
+        }
+
+        const product = await getInventoryProductById(productId);
+        if (!product) {
+            return res.status(404).json({ message: `Product ${productId} not found in Inventory` });
+        }
+
+        const wholePrice = toNumber(product.wholesale_price);
+        if (!Number.isFinite(wholePrice) || wholePrice < 0) {
+            return res.status(400).json({ message: `Invalid wholesale price for product ${productId}` });
+        }
+
+        const cashAmountRaw = req.body.cash_amount ?? req.body.cashAmount;
+        const creditAmountRaw = req.body.credit_amount ?? req.body.creditAmount;
+
+        if (cashAmountRaw === undefined || creditAmountRaw === undefined) {
+            return res.status(400).json({ message: 'cash_amount and credit_amount are required' });
+        }
+
+        const cashAmount = toNumber(cashAmountRaw);
+        const creditAmount = toNumber(creditAmountRaw);
+        if (!Number.isFinite(cashAmount) || cashAmount < 0 || !Number.isFinite(creditAmount) || creditAmount < 0) {
+            return res.status(400).json({ message: 'cash_amount and credit_amount must be non-negative numbers' });
+        }
+
+        const total = wholePrice * quantity;
+        const paidTotal = cashAmount + creditAmount;
+        if (Math.abs(paidTotal - total) > 0.000001) {
+            return res.status(400).json({
+                message: `cash_amount + credit_amount must equal total (${total})`
+            });
         }
 
         const customer = await getCustomerByPhoneNumber(phoneNumberInput);
@@ -540,20 +623,15 @@ exports.createLorrySale = async (req, res) => {
             });
         }
 
-        const retailPrice = Number(req.body.retail_price || req.body.retailPrice || 0);
-        const wholePrice = Number(req.body.whole_price || req.body.wholePrice || 0);
-        const total = req.body.total || quantity * retailPrice;
-
         const sale = new LorrySale({
             lorry_id: lorryId,
             product_id: productId,
-            product_name: req.body.product_name || req.body.productName,
+            product_name: req.body.product_name || req.body.productName || product.name,
             quantity,
-            retail_price: retailPrice,
             whole_price: wholePrice,
             total,
-            cash_amount: req.body.cash_amount || req.body.cashAmount || 0,
-            credit_amount: req.body.credit_amount || req.body.creditAmount || 0,
+            cash_amount: cashAmount,
+            credit_amount: creditAmount,
             phone_number: phoneNumber
         });
 
