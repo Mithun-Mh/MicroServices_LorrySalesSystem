@@ -11,9 +11,13 @@ const CreditLimitSchema = new mongoose.Schema({
 // Helper method to process invoice amounts properly
 CreditLimitSchema.methods.applyInvoiceTransaction = function(totalAmount, paymentMethod) {
     const amount = Number(totalAmount) || 0;
-    if (paymentMethod === 'Cash' || paymentMethod === 'Card') {
+    if (paymentMethod === 'Credit') {
+        // Credit sale increases the amount the customer owes (debit)
         this.debit += amount;
-    } else if (paymentMethod === 'Credit') {
+    } else if (paymentMethod === 'Cash' || paymentMethod === 'Card') {
+        // For cash/card sales, we record both debit (sale) and credit (payment) 
+        // so the net available credit remains unchanged but transaction history is tracked.
+        this.debit += amount;
         this.credit += amount;
     }
 };

@@ -179,49 +179,26 @@ exports.createInvoice = async (req, res) => {
             }
         }
 
-        // ─── 3. UPDATE CUSTOMER DEBIT (If Credit Sale) ──────────────
-        if (paymentMethod === 'Credit') {
-            try {
-                // Fetch current credit data to update it
-                const currentCredit = await axios.get(`${CUSTOMER_SERVICE_URL}/credit-limits/${customerId}`);
-                const newDebit = currentCredit.data.debit + totalAmount;
-
-                await axios.put(`${CUSTOMER_SERVICE_URL}/credit-limits/${customerId}`, {
-                    debit: newDebit
-                });
-            } catch (err) {
-                // Note: In production, we would need to revert the inventory reduction here!
-                console.error(`Debit update failed for customer ${customerId}:`, err.response?.data || err.message);
-                return res.status(500).json({ message: 'Credit sale failed during customer balance update' });
-            }
-        }
-
-        // ─── 4. SAVE THE INVOICE ─────────────────────────────────
+        // ─── 3. SAVE THE INVOICE ─────────────────────────────────
         const invoice = new Invoice(req.body);
         const saved = await invoice.save();
 
-        // Automatically update Customer's CreditLimit using the other microservice
+        // ─── 4. UPDATE CUSTOMER CREDIT ──────────────────────────────
+        // Instead of manual calculation, we call the dedicated update endpoint 
+        // that handles debit/credit logic based on payment method.
         try {
-            const customerUrl = process.env.CUSTOMER_SERVICE_URL || 'http://localhost:5003';
-            // Assuming customerId from the invoice matches the mobileNumber used in CreditLimit
-            const response = await fetch(`${customerUrl}/credit-limits/${saved.customerId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    totalAmount: saved.totalAmount,
-                    paymentMethod: saved.paymentMethod
-                })
+            await axios.put(`${CUSTOMER_SERVICE_URL}/credit-limits/${saved.customerId}`, {
+                totalAmount: saved.totalAmount,
+                paymentMethod: saved.paymentMethod
             });
-
-            if (!response.ok) {
-                console.error(`Warning: Customer Service responded with status ${response.status}`);
-            }
         } catch (serviceErr) {
-            console.error('Error communicating with Customer Service for credit update:', serviceErr.message);
+            // Note: In production, we'd need to consider a saga or retry pattern if this fails
+            console.error(`Warning: Failed to update customer credit for ${saved.customerId}:`, serviceErr.response?.data || serviceErr.message);
         }
 
         res.status(201).json(saved);
     } catch (err) {
+        console.error('Create Invoice Error:', err.message);
         res.status(400).json({ error: err.message });
     }
 };
