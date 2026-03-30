@@ -503,7 +503,7 @@ app.use(express.json());
  *         application/json:
  *           schema:
  *             type: object
- *             required: [lorry_id, product_id, product_name, quantity, retail_price, whole_price, total, name]
+ *             required: [lorry_id, phone_number, product_id, product_name, quantity, retail_price, whole_price, total]
  *             properties:
  *               lorry_id:
  *                 type: string
@@ -523,7 +523,7 @@ app.use(express.json());
  *                 type: number
  *               credit_amount:
  *                 type: number
- *               name:
+ *               phone_number:
  *                 type: string
  *     responses:
  *       201:

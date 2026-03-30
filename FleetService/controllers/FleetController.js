@@ -3,6 +3,34 @@ const LorryStock = require('../models/LorryStock');
 const StockTransfer = require('../models/StockTransfer');
 const LorrySale = require('../models/LorrySale');
 
+const CUSTOMER_SERVICE_URL = process.env.CUSTOMER_SERVICE_URL || 'http://customer-service:5003';
+
+const normalizePhone = (value) => String(value || '').replace(/\s+/g, '').trim();
+
+const getCustomerByPhoneNumber = async (phoneNumber) => {
+    const normalizedPhone = normalizePhone(phoneNumber);
+
+    const response = await fetch(`${CUSTOMER_SERVICE_URL}/customers/${encodeURIComponent(normalizedPhone)}`);
+    if (response.status === 404) {
+        // Fallback for datasets where customer _id is not the phone number.
+        const listResponse = await fetch(`${CUSTOMER_SERVICE_URL}/customers`);
+        if (!listResponse.ok) {
+            throw new Error(`Unable to verify customer. Customer Service responded with ${listResponse.status}`);
+        }
+
+        const customers = await listResponse.json();
+        const matched = Array.isArray(customers)
+            ? customers.find((c) => normalizePhone(c.phone) === normalizedPhone)
+            : null;
+
+        return matched || null;
+    }
+    if (!response.ok) {
+        throw new Error(`Unable to verify customer. Customer Service responded with ${response.status}`);
+    }
+    return response.json();
+};
+
 /**
  * @swagger
  * components:
@@ -60,7 +88,7 @@ const LorrySale = require('../models/LorrySale');
  *           format: date-time
  *     LorrySale:
  *       type: object
- *       required: [lorry_id, product_id, product_name, quantity, retail_price, whole_price, total, name]
+ *       required: [lorry_id, phone_number, product_id, product_name, quantity, retail_price, whole_price, total]
  *       properties:
  *         lorry_id:
  *           type: string
@@ -80,7 +108,7 @@ const LorrySale = require('../models/LorrySale');
  *           type: number
  *         credit_amount:
  *           type: number
- *         name:
+ *         phone_number:
  *           type: string
  */
 
@@ -466,6 +494,7 @@ exports.updateStockTransferStatus = async (req, res) => {
 exports.createLorrySale = async (req, res) => {
     try {
         const lorryId = req.body.lorry_id || req.body.lorryId;
+        const phoneNumberInput = req.body.phone_number || req.body.phoneNumber;
         const productId = req.body.product_id || req.body.productId;
         const quantity = Number(req.body.quantity || 0);
 
@@ -475,8 +504,27 @@ exports.createLorrySale = async (req, res) => {
         if (!productId) {
             return res.status(400).json({ message: 'product_id is required' });
         }
+        if (!phoneNumberInput) {
+            return res.status(400).json({ message: 'phone_number is required' });
+        }
         if (!Number.isFinite(quantity) || quantity <= 0) {
             return res.status(400).json({ message: 'quantity must be a positive number' });
+        }
+
+        const customer = await getCustomerByPhoneNumber(phoneNumberInput);
+        if (!customer) {
+            return res.status(404).json({ message: `Customer ${phoneNumberInput} not found` });
+        }
+
+        const phoneNumber = customer.phone;
+        if (!phoneNumber) {
+            return res.status(400).json({ message: `Customer ${phoneNumberInput} does not have a phone number` });
+        }
+
+        if (String(phoneNumberInput).trim() !== String(phoneNumber).trim()) {
+            return res.status(400).json({
+                message: 'Provided phone_number does not match the selected customer phone'
+            });
         }
 
         const stock = await LorryStock.findOne({ lorry_id: lorryId, product_id: productId });
@@ -506,11 +554,14 @@ exports.createLorrySale = async (req, res) => {
             total,
             cash_amount: req.body.cash_amount || req.body.cashAmount || 0,
             credit_amount: req.body.credit_amount || req.body.creditAmount || 0,
-            name: req.body.name
+            phone_number: phoneNumber
         });
 
         if (!sale.product_name) {
             return res.status(400).json({ message: 'product_name is required' });
+        }
+        if (!sale.phone_number) {
+            return res.status(400).json({ message: 'phone_number is required' });
         }
 
         stock.quantity -= quantity;
