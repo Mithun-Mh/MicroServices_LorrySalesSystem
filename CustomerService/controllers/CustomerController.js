@@ -270,6 +270,12 @@ exports.getCreditLimit = async (req, res) => {
  *             properties:
  *               creditLimit:
  *                 type: number
+ *               totalAmount:
+ *                 type: number
+ *                 description: Provide invoice total to auto-calculate debit/credit
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [Cash, Card, Credit]
  *               debit:
  *                 type: number
  *               credit:
@@ -285,21 +291,25 @@ exports.updateCreditLimit = async (req, res) => {
         const creditData = await CreditLimit.findOne({ mobileNumber: req.params.mobileNumber });
         if (!creditData) return res.status(404).json({ message: 'Credit limit not found' });
         
-        const newLimit = req.body.creditLimit !== undefined ? req.body.creditLimit : creditData.creditLimit;
-        const newDebit = req.body.debit !== undefined ? req.body.debit : creditData.debit;
-        const newCredit = req.body.credit !== undefined ? req.body.credit : creditData.credit;
+        if (req.body.creditLimit !== undefined) {
+            creditData.creditLimit = req.body.creditLimit;
+        }
 
-        const currentAvailable = newLimit - newDebit + newCredit;
+        // Apply automatic debit/credit logic from Invoice if fields exist
+        if (req.body.totalAmount !== undefined && req.body.paymentMethod) {
+            creditData.applyInvoiceTransaction(req.body.totalAmount, req.body.paymentMethod);
+        } else {
+            // Manual overrides from directly editing balances
+            if (req.body.debit !== undefined) creditData.debit = req.body.debit;
+            if (req.body.credit !== undefined) creditData.credit = req.body.credit;
+        }
 
-        if (newDebit > newLimit + newCredit) {
+        if (creditData.debit > creditData.creditLimit + creditData.credit) {
             return res.status(400).json({ message: 'Transaction exceeds credit limit' });
         }
 
-        const updated = await CreditLimit.findOneAndUpdate(
-            { mobileNumber: req.params.mobileNumber },
-            { creditLimit: newLimit, debit: newDebit, credit: newCredit, lastUpdated: Date.now() },
-            { new: true }
-        );
+        creditData.lastUpdated = Date.now();
+        const updated = await creditData.save();
         
         const availableCredit = updated.creditLimit - updated.debit + updated.credit;
 

@@ -128,6 +128,27 @@ exports.createInvoice = async (req, res) => {
     try {
         const invoice = new Invoice(req.body);
         const saved = await invoice.save();
+
+        // Automatically update Customer's CreditLimit using the other microservice
+        try {
+            const customerUrl = process.env.CUSTOMER_SERVICE_URL || 'http://localhost:5003';
+            // Assuming customerId from the invoice matches the mobileNumber used in CreditLimit
+            const response = await fetch(`${customerUrl}/credit-limits/${saved.customerId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    totalAmount: saved.totalAmount,
+                    paymentMethod: saved.paymentMethod
+                })
+            });
+
+            if (!response.ok) {
+                console.error(`Warning: Customer Service responded with status ${response.status}`);
+            }
+        } catch (serviceErr) {
+            console.error('Error communicating with Customer Service for credit update:', serviceErr.message);
+        }
+
         res.status(201).json(saved);
     } catch (err) {
         res.status(400).json({ error: err.message });

@@ -8,4 +8,14 @@ const CreditLimitSchema = new mongoose.Schema({
     lastUpdated: { type: Date, default: Date.now }
 }, { timestamps: true });
 
+// Helper method to process invoice amounts properly
+CreditLimitSchema.methods.applyInvoiceTransaction = function(totalAmount, paymentMethod) {
+    const amount = Number(totalAmount) || 0;
+    if (paymentMethod === 'Cash' || paymentMethod === 'Card') {
+        this.debit += amount;
+    } else if (paymentMethod === 'Credit') {
+        this.credit += amount;
+    }
+};
+
 module.exports = mongoose.model('CreditLimit', CreditLimitSchema);
