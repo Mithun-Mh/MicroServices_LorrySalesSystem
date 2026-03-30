@@ -323,7 +323,11 @@ exports.updateCreditLimit = async (req, res) => {
         }
         // Apply automatic debit/credit logic from Invoice if fields exist
         else if (req.body.totalAmount !== undefined && req.body.paymentMethod) {
-            creditData.applyInvoiceTransaction(req.body.totalAmount, req.body.paymentMethod);
+            if (req.body.action === 'reverse') {
+                creditData.reverseInvoiceTransaction(req.body.totalAmount, req.body.paymentMethod);
+            } else {
+                creditData.applyInvoiceTransaction(req.body.totalAmount, req.body.paymentMethod);
+            }
         }
 
         if (creditData.debit > creditData.creditLimit + creditData.credit) {

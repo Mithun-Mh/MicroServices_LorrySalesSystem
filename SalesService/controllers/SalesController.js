@@ -162,7 +162,7 @@ exports.createInvoice = async (req, res) => {
         }
 
         // ─── 2. INVENTORY STOCK REDUCTION ─────────────────────────
-        // We do this first before final state changes as it's the more likely to fail.
+        const reducedItems = [];
         for (const item of items) {
             try {
                 await axios.put(`${INVENTORY_SERVICE_URL}/stock/update`, {
@@ -170,8 +170,19 @@ exports.createInvoice = async (req, res) => {
                     action: 'reduce',
                     quantity: item.quantity
                 });
+                reducedItems.push(item); // Keep track for rollback
             } catch (invErr) {
                 console.error(`Stock reduction failed: ${item.productName}:`, invErr.response?.data || invErr.message);
+                
+                // ROLLBACK: Restore stock for items already reduced in this attempt
+                for (const rollbackItem of reducedItems) {
+                    await axios.put(`${INVENTORY_SERVICE_URL}/stock/update`, {
+                        product_id: rollbackItem.productId,
+                        action: 'increase',
+                        quantity: rollbackItem.quantity
+                    }).catch(err => console.error("Critical: Rollback failed!", err.message));
+                }
+
                 return res.status(400).json({ 
                     message: `Not enough stock for ${item.productName || item.productId}`,
                     details: invErr.response?.data?.message || invErr.message
@@ -239,10 +250,36 @@ exports.createInvoice = async (req, res) => {
  */
 exports.updateInvoice = async (req, res) => {
     try {
+        const { status } = req.body;
+        const invoice = await Invoice.findById(req.params.id);
+        
+        if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+
+        // Logic for Invoice Cancellation (Restoration of Stock and Credit)
+        if (status === 'Cancelled' && invoice.status !== 'Cancelled') {
+            console.log(`Cancelling invoice ${invoice.invoiceNumber}. Restoring assets...`);
+
+            // 1. Restore Inventory Stock
+            for (const item of invoice.items) {
+                await axios.put(`${INVENTORY_SERVICE_URL}/stock/update`, {
+                    product_id: item.productId,
+                    action: 'increase',
+                    quantity: item.quantity
+                }).catch(err => console.error(`Restore stock failed for ${item.productId}:`, err.message));
+            }
+
+            // 2. Restore Customer Credit Limit
+            await axios.put(`${CUSTOMER_SERVICE_URL}/credit-limits/${invoice.customerId}`, {
+                totalAmount: invoice.totalAmount,
+                paymentMethod: invoice.paymentMethod,
+                action: 'reverse'
+            }).catch(err => console.error(`Restore credit failed for ${invoice.customerId}:`, err.message));
+        }
+
         const updated = await Invoice.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!updated) return res.status(404).json({ message: 'Invoice not found' });
         res.json(updated);
     } catch (err) {
+        console.error('Update Invoice Error:', err.message);
         res.status(400).json({ error: err.message });
     }
 };
