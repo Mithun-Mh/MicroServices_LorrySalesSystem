@@ -18,4 +18,10 @@ CreditLimitSchema.methods.applyInvoiceTransaction = function(totalAmount, paymen
     }
 };
 
+// Helper method to process lorry sales
+CreditLimitSchema.methods.applyLorrySale = function(cashAmount, creditAmount) {
+    this.debit += Number(cashAmount) || 0;
+    this.credit += Number(creditAmount) || 0;
+};
+
 module.exports = mongoose.model('CreditLimit', CreditLimitSchema);

@@ -112,6 +112,20 @@ exports.createCustomer = async (req, res) => {
     try {
         const customer = new Customer(req.body);
         const saved = await customer.save();
+
+        // Automatically provision a default 5000 credit limit
+        try {
+            const initialCreditLimit = new CreditLimit({
+                mobileNumber: saved.phone,
+                creditLimit: 100000,
+                debit: 0,
+                credit: 0
+            });
+            await initialCreditLimit.save();
+        } catch (creditErr) {
+            console.error('Failed to create default credit limit for new customer:', creditErr);
+        }
+
         res.status(201).json(saved);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -182,31 +196,37 @@ exports.deleteCustomer = async (req, res) => {
  * @swagger
  * /credit-limits:
  *   post:
- *     summary: Set a credit limit for a customer
+ *     summary: Set an initial credit limit for a customer
  *     tags: [CreditLimits]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CreditLimit'
+ *             type: object
+ *             required: [mobileNumber, creditLimit]
+ *             properties:
+ *               mobileNumber:
+ *                 type: string
+ *               creditLimit:
+ *                 type: number
  *     responses:
  *       201:
  *         description: Credit limit set
  */
 exports.setCreditLimit = async (req, res) => {
     try {
-        const debit = req.body.debit || 0;
-        const creditBody = req.body.credit || 0;
+        // Prevent manual seeding of debit/credit on creation
+        const credit = new CreditLimit({
+            mobileNumber: req.body.mobileNumber,
+            creditLimit: req.body.creditLimit,
+            debit: 0,
+            credit: 0
+        });
         
-        if (debit > req.body.creditLimit) {
-            return res.status(400).json({ message: 'Debit cannot exceed credit limit' });
-        }
-        
-        const credit = new CreditLimit(req.body);
         const saved = await credit.save();
         
-        const availableCredit = saved.creditLimit - saved.debit + saved.credit;
+        const availableCredit = saved.creditLimit;
         
         res.status(201).json({
             ...saved.toObject(),
@@ -276,10 +296,12 @@ exports.getCreditLimit = async (req, res) => {
  *               paymentMethod:
  *                 type: string
  *                 enum: [Cash, Card, Credit]
- *               debit:
+ *               cashAmount:
  *                 type: number
- *               credit:
+ *                 description: For Lorry Sales debit logic
+ *               creditAmount:
  *                 type: number
+ *                 description: For Lorry Sales credit logic
  *     responses:
  *       200:
  *         description: Credit limit updated
@@ -295,13 +317,13 @@ exports.updateCreditLimit = async (req, res) => {
             creditData.creditLimit = req.body.creditLimit;
         }
 
+        // Apply LorrySale Logic
+        if (req.body.cashAmount !== undefined || req.body.creditAmount !== undefined) {
+            creditData.applyLorrySale(req.body.cashAmount, req.body.creditAmount);
+        }
         // Apply automatic debit/credit logic from Invoice if fields exist
-        if (req.body.totalAmount !== undefined && req.body.paymentMethod) {
+        else if (req.body.totalAmount !== undefined && req.body.paymentMethod) {
             creditData.applyInvoiceTransaction(req.body.totalAmount, req.body.paymentMethod);
-        } else {
-            // Manual overrides from directly editing balances
-            if (req.body.debit !== undefined) creditData.debit = req.body.debit;
-            if (req.body.credit !== undefined) creditData.credit = req.body.credit;
         }
 
         if (creditData.debit > creditData.creditLimit + creditData.credit) {
