@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 
 const CreditLimitSchema = new mongoose.Schema({
-    customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
+    mobileNumber: { type: String, ref: 'Customer', required: true },
     creditLimit: { type: Number, required: true },
-    currentBalance: { type: Number, default: 0 },
+    debit: { type: Number, default: 0 },
+    credit: { type: Number, default: 0 },
     lastUpdated: { type: Date, default: Date.now }
 }, { timestamps: true });
 
