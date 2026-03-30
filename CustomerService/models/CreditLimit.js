@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const CreditLimitSchema = new mongoose.Schema({
-    mobileNumber: { type: String, ref: 'Customer', required: true },
+    mobileNumber: { type: String, ref: 'Customer', required: true, unique: true },
     creditLimit: { type: Number, required: true },
     debit: { type: Number, default: 0 },
     credit: { type: Number, default: 0 },
