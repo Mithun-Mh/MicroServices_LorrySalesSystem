@@ -132,19 +132,26 @@ app.use(express.json());
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, sku, price]
+ *             required: [name, category, retail_price, wholesale_price, cost_price, barcode]
  *             properties:
  *               name:
  *                 type: string
- *               sku:
- *                 type: string
- *               quantity:
- *                 type: number
- *               price:
- *                 type: number
+ *                 example: Formal Shirt
  *               category:
  *                 type: string
- *                 enum: [Shirt, Slippers, Other]
+ *                 example: Shirt
+ *               retail_price:
+ *                 type: number
+ *                 example: 3500
+ *               wholesale_price:
+ *                 type: number
+ *                 example: 3000
+ *               cost_price:
+ *                 type: number
+ *                 example: 2500
+ *               barcode:
+ *                 type: string
+ *                 example: "123456789012"
  *     responses:
  *       201:
  *         description: Product created
@@ -184,6 +191,19 @@ app.use(express.json());
  *         application/json:
  *           schema:
  *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               retail_price:
+ *                 type: number
+ *               wholesale_price:
+ *                 type: number
+ *               cost_price:
+ *                 type: number
+ *               barcode:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Product updated
@@ -205,6 +225,50 @@ app.use(express.json());
 
 /**
  * @swagger
+ * /inventory/stock:
+ *   get:
+ *     summary: Get all warehouse stock
+ *     tags: [Inventory]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Warehouse stock list
+ */
+
+/**
+ * @swagger
+ * /inventory/stock/update:
+ *   put:
+ *     summary: Increase or reduce stock
+ *     tags: [Inventory]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [product_id, action, quantity]
+ *             properties:
+ *               product_id:
+ *                 type: string
+ *                 example: 665a1b2c3d4e5f6a7b8c9d0e
+ *               action:
+ *                 type: string
+ *                 enum: [increase, reduce]
+ *                 example: increase
+ *               quantity:
+ *                 type: number
+ *                 example: 50
+ *     responses:
+ *       200:
+ *         description: Stock updated
+ */
+
+/**
+ * @swagger
  * /inventory/damaged:
  *   get:
  *     summary: Get all damaged item records
@@ -215,7 +279,7 @@ app.use(express.json());
  *       200:
  *         description: Damaged items list
  *   post:
- *     summary: Record damaged items
+ *     summary: Record damaged items (reduces stock)
  *     tags: [Inventory]
  *     security:
  *       - bearerAuth: []
@@ -225,14 +289,17 @@ app.use(express.json());
  *         application/json:
  *           schema:
  *             type: object
- *             required: [productId, quantity]
+ *             required: [product_id, quantity, reason]
  *             properties:
- *               productId:
+ *               product_id:
  *                 type: string
+ *                 example: 665a1b2c3d4e5f6a7b8c9d0e
  *               quantity:
  *                 type: number
+ *                 example: 5
  *               reason:
  *                 type: string
+ *                 example: "Water damage"
  *     responses:
  *       201:
  *         description: Damaged items recorded
@@ -927,19 +994,19 @@ const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
 // Public Routes (Auth)
-app.use('/auth', proxy('http://localhost:5006'));
+app.use('/auth', proxy('http://auth-service:5006'));
 
 // Protected Routes with RBAC
 // Inventory, Sales, Finance: Admin and Staff
-app.use('/inventory', authenticate(['admin', 'staff']), proxy('http://localhost:5001'));
-app.use('/sales', authenticate(['admin', 'staff']), proxy('http://localhost:5004'));
-app.use('/finance', authenticate(['admin', 'staff']), proxy('http://localhost:5005'));
+app.use('/inventory', authenticate(['admin', 'staff']), proxy('http://inventory-service:5001'));
+app.use('/sales', authenticate(['admin', 'staff']), proxy('http://sales-service:5004'));
+app.use('/finance', authenticate(['admin', 'staff']), proxy('http://finance-service:5005'));
 
 // Fleet: Rep, Admin, Staff
-app.use('/fleet', authenticate(['admin', 'staff', 'rep']), proxy('http://localhost:5002'));
+app.use('/fleet', authenticate(['admin', 'staff', 'rep']), proxy('http://fleet-service:5002'));
 
 // Customer: Rep, Admin, Staff
-app.use('/customer', authenticate(['admin', 'staff', 'rep']), proxy('http://localhost:5003'));
+app.use('/customer', authenticate(['admin', 'staff', 'rep']), proxy('http://customer-service:5003'));
 
 app.listen(port, () => {
     console.log(`API Gateway running on port ${port}`);
