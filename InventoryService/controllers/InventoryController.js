@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const WarehouseStock = require('../models/WarehouseStock');
 const DamagedItem = require('../models/DamagedItem');
 
 /**
@@ -7,33 +8,50 @@ const DamagedItem = require('../models/DamagedItem');
  *   schemas:
  *     Product:
  *       type: object
- *       required: [name, sku, price]
+ *       required: [name, category, retail_price, wholesale_price, cost_price, barcode]
  *       properties:
  *         _id:
  *           type: string
  *         name:
  *           type: string
- *           example: "Men's Cotton Shirt"
- *         sku:
- *           type: string
- *           example: "SHT-001"
- *         quantity:
- *           type: number
- *           example: 500
- *         price:
- *           type: number
- *           example: 1250.00
+ *           example: "Formal Shirt"
  *         category:
  *           type: string
- *           enum: [Shirt, Slippers, Other]
  *           example: "Shirt"
- *     DamagedItem:
+ *         retail_price:
+ *           type: number
+ *           example: 3500
+ *         wholesale_price:
+ *           type: number
+ *           example: 3000
+ *         cost_price:
+ *           type: number
+ *           example: 2500
+ *         barcode:
+ *           type: string
+ *           example: "123456789012"
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *     WarehouseStock:
  *       type: object
- *       required: [productId, quantity]
+ *       required: [product_id, quantity]
  *       properties:
  *         _id:
  *           type: string
- *         productId:
+ *         product_id:
+ *           type: string
+ *           example: "665a1b2c3d4e5f6a7b8c9d0e"
+ *         quantity:
+ *           type: number
+ *           example: 100
+ *     DamagedItem:
+ *       type: object
+ *       required: [product_id, quantity]
+ *       properties:
+ *         _id:
+ *           type: string
+ *         product_id:
  *           type: string
  *           example: "665a1b2c3d4e5f6a7b8c9d0e"
  *         quantity:
@@ -41,24 +59,14 @@ const DamagedItem = require('../models/DamagedItem');
  *           example: 5
  *         reason:
  *           type: string
- *           example: "Water damage during transport"
- *         recordedDate:
+ *           example: "Water damage"
+ *         date:
  *           type: string
  *           format: date-time
  */
 
 // ─── PRODUCT CRUD ───────────────────────────────────────────
 
-/**
- * @swagger
- * /products:
- *   get:
- *     summary: Get all products in the warehouse
- *     tags: [Products]
- *     responses:
- *       200:
- *         description: List of products
- */
 exports.getAllProducts = async (req, res) => {
     try {
         const products = await Product.find();
@@ -68,24 +76,6 @@ exports.getAllProducts = async (req, res) => {
     }
 };
 
-/**
- * @swagger
- * /products/{id}:
- *   get:
- *     summary: Get a single product by ID
- *     tags: [Products]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Product details
- *       404:
- *         description: Product not found
- */
 exports.getProductById = async (req, res) => {
     try {
         const product = await Product.findById(req.params.id);
@@ -96,54 +86,19 @@ exports.getProductById = async (req, res) => {
     }
 };
 
-/**
- * @swagger
- * /products:
- *   post:
- *     summary: Add a new product to the warehouse
- *     tags: [Products]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Product'
- *     responses:
- *       201:
- *         description: Product created
- */
 exports.createProduct = async (req, res) => {
     try {
         const product = new Product(req.body);
         const saved = await product.save();
+        // Initialize stock
+        const stock = new WarehouseStock({ product_id: saved._id, quantity: 0 });
+        await stock.save();
         res.status(201).json(saved);
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
 };
 
-/**
- * @swagger
- * /products/{id}:
- *   put:
- *     summary: Update a product (e.g. restock quantity)
- *     tags: [Products]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Product'
- *     responses:
- *       200:
- *         description: Product updated
- */
 exports.updateProduct = async (req, res) => {
     try {
         const updated = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -154,86 +109,80 @@ exports.updateProduct = async (req, res) => {
     }
 };
 
-/**
- * @swagger
- * /products/{id}:
- *   delete:
- *     summary: Delete a product
- *     tags: [Products]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Product deleted
- */
 exports.deleteProduct = async (req, res) => {
     try {
         const deleted = await Product.findByIdAndDelete(req.params.id);
         if (!deleted) return res.status(404).json({ message: 'Product not found' });
+        await WarehouseStock.findOneAndDelete({ product_id: req.params.id });
         res.json({ message: 'Product deleted successfully' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
 
+// ─── WAREHOUSE STOCK ────────────────────────────────────────
+
+exports.getStock = async (req, res) => {
+    try {
+        const stock = await WarehouseStock.find().populate('product_id');
+        res.json(stock);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+exports.updateStock = async (req, res) => {
+    try {
+        const { product_id, action, quantity } = req.body; // action = 'increase' or 'reduce'
+        if (!['increase', 'reduce'].includes(action)) {
+            return res.status(400).json({ message: "Action must be 'increase' or 'reduce'" });
+        }
+        
+        let stock = await WarehouseStock.findOne({ product_id });
+        if (!stock) return res.status(404).json({ message: 'Stock not found for this product' });
+
+        if (action === 'increase') {
+            stock.quantity += quantity;
+        } else if (action === 'reduce') {
+            if (stock.quantity < quantity) {
+                return res.status(400).json({ message: 'Not enough stock to reduce' });
+            }
+            stock.quantity -= quantity;
+        }
+        
+        const updated = await stock.save();
+        res.json(updated);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+
 // ─── DAMAGED ITEMS ──────────────────────────────────────────
 
-/**
- * @swagger
- * /damaged:
- *   get:
- *     summary: Get all damaged item records
- *     tags: [DamagedItems]
- *     responses:
- *       200:
- *         description: List of damaged item records
- */
 exports.getAllDamaged = async (req, res) => {
     try {
-        const items = await DamagedItem.find().populate('productId');
+        const items = await DamagedItem.find().populate('product_id');
         res.json(items);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
 
-/**
- * @swagger
- * /damaged:
- *   post:
- *     summary: Record damaged items (reduces warehouse stock)
- *     tags: [DamagedItems]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/DamagedItem'
- *     responses:
- *       201:
- *         description: Damaged item recorded and stock reduced
- *       400:
- *         description: Not enough stock or invalid data
- */
 exports.recordDamaged = async (req, res) => {
     try {
-        const { productId, quantity, reason } = req.body;
-        // Reduce stock from Product
-        const product = await Product.findById(productId);
-        if (!product) return res.status(404).json({ message: 'Product not found' });
-        if (product.quantity < quantity) {
+        const { product_id, quantity, reason } = req.body;
+        // Reduce stock from WarehouseStock
+        const stock = await WarehouseStock.findOne({ product_id });
+        if (!stock) return res.status(404).json({ message: 'Stock not found' });
+        if (stock.quantity < quantity) {
             return res.status(400).json({ message: 'Not enough stock to record as damaged' });
         }
-        product.quantity -= quantity;
-        await product.save();
+        stock.quantity -= quantity;
+        await stock.save();
 
-        const damaged = new DamagedItem({ productId, quantity, reason });
+        const damaged = new DamagedItem({ product_id, quantity, reason });
         const saved = await damaged.save();
-        res.status(201).json({ message: 'Damaged items recorded, stock reduced', damaged: saved, remainingStock: product.quantity });
+        res.status(201).json({ message: 'Damaged item recorded, stock reduced', damaged: saved, remainingStock: stock.quantity });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }

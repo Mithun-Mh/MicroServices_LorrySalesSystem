@@ -46,6 +46,10 @@ app.post('/products', inventoryController.createProduct);
 app.put('/products/:id', inventoryController.updateProduct);
 app.delete('/products/:id', inventoryController.deleteProduct);
 
+// ─── STOCK ROUTES ───────────────────────────────────────────
+app.get('/stock', inventoryController.getStock);
+app.put('/stock/update', inventoryController.updateStock);
+
 // ─── DAMAGED ITEMS ROUTES ───────────────────────────────────
 app.get('/damaged', inventoryController.getAllDamaged);
 app.post('/damaged', inventoryController.recordDamaged);
