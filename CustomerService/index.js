@@ -13,7 +13,10 @@ const port = 5003;
 app.use(express.json());
 
 // MongoDB Connection
-const mongoUrl = process.env.MONGO_URI || 'mongodb://localhost:27017/lorry_system';
+const baseMongoUrl = process.env.MONGO_URI || 'mongodb://localhost:27017/lorry_system';
+// Replace the default database name with the service-specific one
+const mongoUrl = baseMongoUrl.replace(/(\.net\/|\:\d+\/)[^\?]+/, '$1LorrySystem_Customer');
+
 mongoose.connect(mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('Connected to MongoDB - Customer Service'))
     .catch(err => console.error('MongoDB connection error:', err));

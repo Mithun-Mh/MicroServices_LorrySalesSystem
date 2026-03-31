@@ -227,10 +227,12 @@ exports.setCreditLimit = async (req, res) => {
         const saved = await credit.save();
         
         const availableCredit = saved.creditLimit;
+        const currentBalance = saved.debit - saved.credit;
         
         res.status(201).json({
             ...saved.toObject(),
-            availableCredit: availableCredit
+            availableCredit: availableCredit,
+            currentBalance: currentBalance
         });
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -259,10 +261,12 @@ exports.getCreditLimit = async (req, res) => {
         if (!creditData) return res.status(404).json({ message: 'Credit limit not found for this customer' });
         
         const availableCredit = creditData.creditLimit - creditData.debit + creditData.credit;
+        const currentBalance = creditData.debit - creditData.credit;
         
         res.json({
             ...creditData.toObject(),
-            availableCredit: availableCredit
+            availableCredit: availableCredit,
+            currentBalance: currentBalance
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -334,10 +338,12 @@ exports.updateCreditLimit = async (req, res) => {
         const updated = await creditData.save();
         
         const availableCredit = updated.creditLimit - updated.debit + updated.credit;
+        const currentBalance = updated.debit - updated.credit;
 
         res.json({
             ...updated.toObject(),
-            availableCredit: availableCredit
+            availableCredit: availableCredit,
+            currentBalance: currentBalance
         });
     } catch (err) {
         res.status(400).json({ error: err.message });

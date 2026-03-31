@@ -11,7 +11,9 @@ const port = 5006;
 app.use(express.json());
 
 // MongoDB Connection
-const mongoUrl = process.env.MONGO_URI || 'mongodb://localhost:27017/lorry_system';
+const baseMongoUrl = process.env.MONGO_URI || 'mongodb://localhost:27017/lorry_system';
+const mongoUrl = baseMongoUrl.replace(/(\.net\/|\:\d+\/)[^\?]+/, '$1LorrySystem_Auth');
+
 mongoose.connect(mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('Connected to MongoDB - Auth Service'))
     .catch(err => console.error('MongoDB connection error:', err));
