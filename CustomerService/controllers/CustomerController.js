@@ -9,8 +9,6 @@ const CreditLimit = require('../models/CreditLimit');
  *       type: object
  *       required: [name, shopName, address, phone]
  *       properties:
- *         _id:
- *           type: string
  *         name:
  *           type: string
  *           example: "Nimal Fernando"
@@ -26,21 +24,25 @@ const CreditLimit = require('../models/CreditLimit');
  *         email:
  *           type: string
  *           example: "nimal@shop.lk"
- *         paymentMethod:
- *           type: string
- *           enum: [Cash, Card, Credit]
  *     CreditLimit:
  *       type: object
- *       required: [customerId, creditLimit]
+ *       required: [mobileNumber, creditLimit]
  *       properties:
- *         customerId:
+ *         mobileNumber:
  *           type: string
+ *           description: Customer's mobile number
  *         creditLimit:
  *           type: number
  *           example: 50000
- *         currentBalance:
+ *         debit:
  *           type: number
  *           example: 12000
+ *         credit:
+ *           type: number
+ *           example: 5000
+ *         availableCredit:
+ *           type: number
+ *           example: 38000
  */
 
 // ─── CUSTOMER CRUD ──────────────────────────────────────────
@@ -110,6 +112,20 @@ exports.createCustomer = async (req, res) => {
     try {
         const customer = new Customer(req.body);
         const saved = await customer.save();
+
+        // Automatically provision a default 5000 credit limit
+        try {
+            const initialCreditLimit = new CreditLimit({
+                mobileNumber: saved.phone,
+                creditLimit: 100000,
+                debit: 0,
+                credit: 0
+            });
+            await initialCreditLimit.save();
+        } catch (creditErr) {
+            console.error('Failed to create default credit limit for new customer:', creditErr);
+        }
+
         res.status(201).json(saved);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -180,23 +196,42 @@ exports.deleteCustomer = async (req, res) => {
  * @swagger
  * /credit-limits:
  *   post:
- *     summary: Set a credit limit for a customer
+ *     summary: Set an initial credit limit for a customer
  *     tags: [CreditLimits]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CreditLimit'
+ *             type: object
+ *             required: [mobileNumber, creditLimit]
+ *             properties:
+ *               mobileNumber:
+ *                 type: string
+ *               creditLimit:
+ *                 type: number
  *     responses:
  *       201:
  *         description: Credit limit set
  */
 exports.setCreditLimit = async (req, res) => {
     try {
-        const credit = new CreditLimit(req.body);
+        // Prevent manual seeding of debit/credit on creation
+        const credit = new CreditLimit({
+            mobileNumber: req.body.mobileNumber,
+            creditLimit: req.body.creditLimit,
+            debit: 0,
+            credit: 0
+        });
+        
         const saved = await credit.save();
-        res.status(201).json(saved);
+        
+        const availableCredit = saved.creditLimit;
+        
+        res.status(201).json({
+            ...saved.toObject(),
+            availableCredit: availableCredit
+        });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
@@ -204,13 +239,13 @@ exports.setCreditLimit = async (req, res) => {
 
 /**
  * @swagger
- * /credit-limits/{customerId}:
+ * /credit-limits/{mobileNumber}:
  *   get:
  *     summary: Get credit limit for a specific customer
  *     tags: [CreditLimits]
  *     parameters:
  *       - in: path
- *         name: customerId
+ *         name: mobileNumber
  *         required: true
  *         schema:
  *           type: string
@@ -220,9 +255,15 @@ exports.setCreditLimit = async (req, res) => {
  */
 exports.getCreditLimit = async (req, res) => {
     try {
-        const credit = await CreditLimit.findOne({ customerId: req.params.customerId }).populate('customerId');
-        if (!credit) return res.status(404).json({ message: 'Credit limit not found for this customer' });
-        res.json(credit);
+        const creditData = await CreditLimit.findOne({ mobileNumber: req.params.mobileNumber }).populate('mobileNumber');
+        if (!creditData) return res.status(404).json({ message: 'Credit limit not found for this customer' });
+        
+        const availableCredit = creditData.creditLimit - creditData.debit + creditData.credit;
+        
+        res.json({
+            ...creditData.toObject(),
+            availableCredit: availableCredit
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -230,13 +271,13 @@ exports.getCreditLimit = async (req, res) => {
 
 /**
  * @swagger
- * /credit-limits/{customerId}:
+ * /credit-limits/{mobileNumber}:
  *   put:
  *     summary: Update credit limit or current balance
  *     tags: [CreditLimits]
  *     parameters:
  *       - in: path
- *         name: customerId
+ *         name: mobileNumber
  *         required: true
  *         schema:
  *           type: string
@@ -249,21 +290,59 @@ exports.getCreditLimit = async (req, res) => {
  *             properties:
  *               creditLimit:
  *                 type: number
- *               currentBalance:
+ *               totalAmount:
  *                 type: number
+ *                 description: Provide invoice total to auto-calculate debit/credit
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [Cash, Card, Credit]
+ *               cashAmount:
+ *                 type: number
+ *                 description: For Lorry Sales debit logic
+ *               creditAmount:
+ *                 type: number
+ *                 description: For Lorry Sales credit logic
  *     responses:
  *       200:
  *         description: Credit limit updated
+ *       400:
+ *         description: Transaction exceeds credit limit or bad request
  */
 exports.updateCreditLimit = async (req, res) => {
     try {
-        const updated = await CreditLimit.findOneAndUpdate(
-            { customerId: req.params.customerId },
-            req.body,
-            { new: true }
-        );
-        if (!updated) return res.status(404).json({ message: 'Credit limit not found' });
-        res.json(updated);
+        const creditData = await CreditLimit.findOne({ mobileNumber: req.params.mobileNumber });
+        if (!creditData) return res.status(404).json({ message: 'Credit limit not found' });
+        
+        if (req.body.creditLimit !== undefined) {
+            creditData.creditLimit = req.body.creditLimit;
+        }
+
+        // Apply LorrySale Logic
+        if (req.body.cashAmount !== undefined || req.body.creditAmount !== undefined) {
+            creditData.applyLorrySale(req.body.cashAmount, req.body.creditAmount);
+        }
+        // Apply automatic debit/credit logic from Invoice if fields exist
+        else if (req.body.totalAmount !== undefined && req.body.paymentMethod) {
+            if (req.body.action === 'reverse') {
+                creditData.reverseInvoiceTransaction(req.body.totalAmount, req.body.paymentMethod);
+            } else {
+                creditData.applyInvoiceTransaction(req.body.totalAmount, req.body.paymentMethod);
+            }
+        }
+
+        if (creditData.debit > creditData.creditLimit + creditData.credit) {
+            return res.status(400).json({ message: 'Transaction exceeds credit limit' });
+        }
+
+        creditData.lastUpdated = Date.now();
+        const updated = await creditData.save();
+        
+        const availableCredit = updated.creditLimit - updated.debit + updated.credit;
+
+        res.json({
+            ...updated.toObject(),
+            availableCredit: availableCredit
+        });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }

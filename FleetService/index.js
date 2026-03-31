@@ -50,6 +50,17 @@ app.post('/lorry-stock', fleetController.loadStock);
 app.get('/lorry-stock/:lorryId', fleetController.getStockByLorry);
 app.put('/lorry-stock/return/:id', fleetController.returnStock);
 
+// ─── STOCK TRANSFER ROUTES ──────────────────────────────────
+app.post('/stock-transfers', fleetController.createStockTransfer);
+app.get('/stock-transfers', fleetController.getAllStockTransfers);
+app.get('/stock-transfers/:transferId', fleetController.getStockTransferByTransferId);
+app.put('/stock-transfers/:transferId/status', fleetController.updateStockTransferStatus);
+
+// ─── LORRY SALE ROUTES ───────────────────────────────────────
+app.post('/lorry-sales', fleetController.createLorrySale);
+app.get('/lorry-sales', fleetController.getAllLorrySales);
+app.get('/lorry-sales/product/:productId', fleetController.getLorrySalesByProduct);
+
 app.listen(port, () => {
     console.log(`Fleet Service running on port ${port}`);
 });

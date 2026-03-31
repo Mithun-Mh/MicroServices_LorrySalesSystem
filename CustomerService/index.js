@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsDoc = require('swagger-jsdoc');
+const path = require('path');
 require('dotenv').config();
 
 const customerController = require('./controllers/CustomerController');
@@ -28,7 +29,7 @@ const swaggerOptions = {
         },
         servers: [{ url: `http://localhost:${port}` }]
     },
-    apis: ['./index.js', './controllers/*.js']
+    apis: [path.join(__dirname, '*.js'), path.join(__dirname, 'controllers', '*.js')]
 };
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
@@ -48,8 +49,8 @@ app.delete('/customers/:id', customerController.deleteCustomer);
 
 // ─── CREDIT LIMIT ROUTES ───────────────────────────────────
 app.post('/credit-limits', customerController.setCreditLimit);
-app.get('/credit-limits/:customerId', customerController.getCreditLimit);
-app.put('/credit-limits/:customerId', customerController.updateCreditLimit);
+app.get('/credit-limits/:mobileNumber', customerController.getCreditLimit);
+app.put('/credit-limits/:mobileNumber', customerController.updateCreditLimit);
 
 app.listen(port, () => {
     console.log(`Customer Service running on port ${port}`);
