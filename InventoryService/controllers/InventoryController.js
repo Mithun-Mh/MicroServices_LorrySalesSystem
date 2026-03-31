@@ -88,12 +88,22 @@ exports.getProductById = async (req, res) => {
 
 exports.createProduct = async (req, res) => {
     try {
-        const product = new Product(req.body);
-        const saved = await product.save();
-        // Initialize stock
-        const stock = new WarehouseStock({ product_id: saved._id, quantity: 0 });
-        await stock.save();
-        res.status(201).json(saved);
+        const product = await Product.create({
+            name: req.body.name,
+            sku: req.body.sku,
+            category: req.body.category,
+            retail_price: req.body.retail_price,
+            wholesale_price: req.body.wholesale_price,
+            cost_price: req.body.cost_price,
+            barcode: req.body.barcode
+        });
+
+        await WarehouseStock.create({
+            product_id: product._id,
+            quantity: 0
+        });
+
+        res.status(201).json(product);
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
