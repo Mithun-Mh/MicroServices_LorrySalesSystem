@@ -12,7 +12,9 @@ const port = 5002;
 app.use(express.json());
 
 // MongoDB Connection
-const mongoUrl = process.env.MONGO_URI || 'mongodb+srv://lasalflowiix_db_user:FOMDbEvkF25z7R19@fastxprodbackup0129.hldrh6n.mongodb.net/LorrySystem?retryWrites=true&w=majority';
+const baseMongoUrl = process.env.MONGO_URI || 'mongodb+srv://lasalflowiix_db_user:FOMDbEvkF25z7R19@fastxprodbackup0129.hldrh6n.mongodb.net/LorrySystem?retryWrites=true&w=majority';
+const mongoUrl = baseMongoUrl.replace(/(\.net\/|\:\d+\/)[^\?]+/, '$1LorrySystem_Fleet');
+
 mongoose.connect(mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('Connected to MongoDB - Fleet Service'))
     .catch(err => console.error('MongoDB connection error:', err));
