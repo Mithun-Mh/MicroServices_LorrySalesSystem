@@ -51,7 +51,6 @@ app.put('/customers/:id', customerController.updateCustomer);
 app.delete('/customers/:id', customerController.deleteCustomer);
 
 // ─── CREDIT LIMIT ROUTES ───────────────────────────────────
-app.post('/credit-limits', customerController.setCreditLimit);
 app.get('/credit-limits/:mobileNumber', customerController.getCreditLimit);
 app.put('/credit-limits/:mobileNumber', customerController.updateCreditLimit);
 

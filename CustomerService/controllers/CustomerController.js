@@ -226,53 +226,6 @@ exports.deleteCustomer = async (req, res) => {
 
 /**
  * @swagger
- * /credit-limits:
- *   post:
- *     summary: Set an initial credit limit for a customer
- *     tags: [CreditLimits]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [mobileNumber, creditLimit]
- *             properties:
- *               mobileNumber:
- *                 type: string
- *               creditLimit:
- *                 type: number
- *     responses:
- *       201:
- *         description: Credit limit set
- */
-exports.setCreditLimit = async (req, res) => {
-    try {
-        // Prevent manual seeding of debit/credit on creation
-        const credit = new CreditLimit({
-            mobileNumber: req.body.mobileNumber,
-            creditLimit: req.body.creditLimit,
-            debit: 0,
-            credit: 0
-        });
-        
-        const saved = await credit.save();
-        
-        const availableCredit = saved.creditLimit;
-        const currentBalance = saved.debit - saved.credit;
-        
-        res.status(201).json({
-            ...saved.toObject(),
-            availableCredit: availableCredit,
-            currentBalance: currentBalance
-        });
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
-};
-
-/**
- * @swagger
  * /credit-limits/{mobileNumber}:
  *   get:
  *     summary: Get credit limit for a specific customer
@@ -286,6 +239,17 @@ exports.setCreditLimit = async (req, res) => {
  *     responses:
  *       200:
  *         description: Credit limit details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 creditLimit:
+ *                   type: number
+ *                 availableCredit:
+ *                   type: number
+ *                 currentBalance:
+ *                   type: number
  */
 exports.getCreditLimit = async (req, res) => {
     try {
@@ -296,7 +260,7 @@ exports.getCreditLimit = async (req, res) => {
         const currentBalance = creditData.debit - creditData.credit;
         
         res.json({
-            ...creditData.toObject(),
+            creditLimit: creditData.creditLimit,
             availableCredit: availableCredit,
             currentBalance: currentBalance
         });
@@ -309,7 +273,7 @@ exports.getCreditLimit = async (req, res) => {
  * @swagger
  * /credit-limits/{mobileNumber}:
  *   put:
- *     summary: Update credit limit or current balance
+ *     summary: Update customer credit limit
  *     tags: [CreditLimits]
  *     parameters:
  *       - in: path
@@ -323,49 +287,29 @@ exports.getCreditLimit = async (req, res) => {
  *         application/json:
  *           schema:
  *             type: object
+ *             required: [creditLimit]
  *             properties:
  *               creditLimit:
  *                 type: number
- *               totalAmount:
- *                 type: number
- *                 description: Provide invoice total to auto-calculate debit/credit
- *               paymentMethod:
- *                 type: string
- *                 enum: [Cash, Card, Credit]
- *               cashAmount:
- *                 type: number
- *                 description: For Lorry Sales debit logic
- *               creditAmount:
- *                 type: number
- *                 description: For Lorry Sales credit logic
  *     responses:
  *       200:
  *         description: Credit limit updated
  *       400:
- *         description: Transaction exceeds credit limit or bad request
+ *         description: Bad request
+ *       404:
+ *         description: Credit limit not found
  */
 exports.updateCreditLimit = async (req, res) => {
     try {
         const creditData = await CreditLimit.findOne({ mobileNumber: req.params.mobileNumber });
         if (!creditData) return res.status(404).json({ message: 'Credit limit not found' });
         
-        if (req.body.creditLimit !== undefined) {
-            creditData.creditLimit = req.body.creditLimit;
+        if (req.body.creditLimit === undefined) {
+            return res.status(400).json({ message: 'creditLimit is required' });
         }
 
-        // Apply LorrySale Logic
-        if (req.body.cashAmount !== undefined || req.body.creditAmount !== undefined) {
-            creditData.applyLorrySale(req.body.cashAmount, req.body.creditAmount);
-        }
-        // Apply automatic debit/credit logic from Invoice if fields exist
-        else if (req.body.totalAmount !== undefined && req.body.paymentMethod) {
-            creditData.applyInvoiceTransaction(req.body.totalAmount, req.body.paymentMethod);
-        }
-
-        if (creditData.debit > creditData.creditLimit + creditData.credit) {
-            return res.status(400).json({ message: 'Transaction exceeds credit limit' });
-        }
-
+        creditData.creditLimit = req.body.creditLimit;
+        
         creditData.lastUpdated = Date.now();
         const updated = await creditData.save();
         
