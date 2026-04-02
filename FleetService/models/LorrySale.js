@@ -5,7 +5,6 @@ const LorrySaleSchema = new mongoose.Schema({
     product_id: { type: String, required: true },
     product_name: { type: String, required: true },
     quantity: { type: Number, required: true },
-    retail_price: { type: Number, required: true },
     whole_price: { type: Number, required: true },
     total: { type: Number, required: true },
     cash_amount: { type: Number, default: 0 },
