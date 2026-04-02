@@ -60,7 +60,25 @@ const CreditLimit = require('../models/CreditLimit');
 exports.getAllCustomers = async (req, res) => {
     try {
         const customers = await Customer.find();
-        res.json(customers);
+        const creditLimits = await CreditLimit.find();
+        
+        const customerWithCredit = customers.map(customer => {
+            const customerObj = customer.toObject();
+            const creditInfo = creditLimits.find(cl => cl.mobileNumber === customerObj.phone);
+            
+            if (creditInfo) {
+                customerObj.creditLimitInfo = {
+                    creditLimit: creditInfo.creditLimit,
+                    availableCredit: creditInfo.creditLimit - creditInfo.debit + creditInfo.credit,
+                    currentBalance: creditInfo.debit - creditInfo.credit
+                };
+            } else {
+                customerObj.creditLimitInfo = null;
+            }
+            return customerObj;
+        });
+
+        res.json(customerWithCredit);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -86,7 +104,21 @@ exports.getCustomerById = async (req, res) => {
     try {
         const customer = await Customer.findById(req.params.id);
         if (!customer) return res.status(404).json({ message: 'Customer not found' });
-        res.json(customer);
+        
+        const creditInfo = await CreditLimit.findOne({ mobileNumber: customer.phone });
+        const customerObj = customer.toObject();
+        
+        if (creditInfo) {
+             customerObj.creditLimitInfo = {
+                 creditLimit: creditInfo.creditLimit,
+                 availableCredit: creditInfo.creditLimit - creditInfo.debit + creditInfo.credit,
+                 currentBalance: creditInfo.debit - creditInfo.credit
+             };
+        } else {
+             customerObj.creditLimitInfo = null;
+        }
+
+        res.json(customerObj);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
