@@ -25,5 +25,5 @@ foreach ($service in $services) {
 
 Write-Host "--- All services initiated! ---" -ForegroundColor Green
 Write-Host "You should see 7 new terminal windows open."
-Write-Host "API Gateway is on http://localhost:80"
-Write-Host "Swagger UI: http://localhost/api-docs"
+Write-Host "API Gateway is on http://localhost:3000"
+Write-Host "Swagger UI: http://localhost:3000/api-docs"

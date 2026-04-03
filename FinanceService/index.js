@@ -41,16 +41,16 @@ app.get('/status', (req, res) => {
     res.status(200).json({ message: 'Finance Service is up and running' });
 });
 
+// ─── TRANSACTIONS ROUTES ──────────────────────────────────────
+app.get('/transactions', financeController.getAllTransactions);
+app.post('/transactions', financeController.createTransaction);
+
 // ─── EXPENSE ROUTES ─────────────────────────────────────────
 app.get('/expenses', financeController.getAllExpenses);
 app.post('/expenses', financeController.createExpense);
-app.put('/expenses/:id', financeController.updateExpense);
-app.delete('/expenses/:id', financeController.deleteExpense);
 
 // ─── PROFIT SUMMARY ROUTES ─────────────────────────────────
-app.post('/profit-summary', financeController.createProfitSummary);
-app.get('/profit-summary', financeController.getAllProfitSummaries);
-app.get('/profit-summary/:lorryId', financeController.getProfitByLorry);
+app.get('/finance/summary/:lorryId', financeController.getSummaryByLorry);
 
 app.listen(port, () => {
     console.log(`Finance Service running on port ${port}`);

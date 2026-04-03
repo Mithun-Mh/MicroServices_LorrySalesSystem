@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const swaggerJsDoc = require('swagger-jsdoc');
 require('dotenv').config();
 const app = express();
-const port = 80;
+const port = process.env.GATEWAY_PORT || 3000;
 
 app.use(express.json());
 
@@ -1090,7 +1090,7 @@ const swaggerOptions = {
             version: '1.0.0',
             description: 'Central Gateway for Lorry Sales Microservices with RBAC'
         },
-        servers: [{ url: 'http://localhost' }]
+        servers: [{ url: `http://localhost:${port}` }]
     },
     apis: ['./index.js', './routes.js']
 };
@@ -1098,20 +1098,25 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
+// Redirect root to Swagger UI automatically
+app.get('/', (req, res) => {
+    res.redirect('/api-docs');
+});
+
 // Public Routes (Auth)
-app.use('/auth', proxy('http://auth-service:5006'));
+app.use('/auth', proxy('http://localhost:5006'));
 
 // Protected Routes with RBAC
 // Inventory, Sales, Finance: Admin and Staff
-app.use('/inventory', authenticate(['admin', 'staff']), proxy('http://inventory-service:5001'));
-app.use('/sales', authenticate(['admin', 'staff']), proxy('http://sales-service:5004'));
-app.use('/finance', authenticate(['admin', 'staff']), proxy('http://finance-service:5005'));
+app.use('/inventory', authenticate(['admin', 'staff']), proxy('http://localhost:5001'));
+app.use('/sales', authenticate(['admin', 'staff']), proxy('http://localhost:5004'));
+app.use('/finance', authenticate(['admin', 'staff']), proxy('http://localhost:5005'));
 
 // Fleet: Rep, Admin, Staff
-app.use('/fleet', authenticate(['admin', 'staff', 'rep']), proxy('http://fleet-service:5002'));
+app.use('/fleet', authenticate(['admin', 'staff', 'rep']), proxy('http://localhost:5002'));
 
 // Customer: Rep, Admin, Staff
-app.use('/customer', authenticate(['admin', 'staff', 'rep']), proxy('http://customer-service:5003'));
+app.use('/customer', authenticate(['admin', 'staff', 'rep']), proxy('http://localhost:5003'));
 
 app.listen(port, () => {
     console.log(`API Gateway running on port ${port}`);

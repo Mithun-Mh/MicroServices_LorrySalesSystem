@@ -1,10 +1,27 @@
 const Expense = require('../models/Expense');
-const ProfitSummary = require('../models/ProfitSummary');
+const Transaction = require('../models/Transaction');
+const DailySummary = require('../models/DailySummary');
 
 /**
  * @swagger
  * components:
  *   schemas:
+ *     Transaction:
+ *       type: object
+ *       required: [lorryId, cashAmount, creditAmount]
+ *       properties:
+ *         lorryId:
+ *           type: string
+ *           example: "LH3490"
+ *         cashAmount:
+ *           type: number
+ *           example: 50000
+ *         creditAmount:
+ *           type: number
+ *           example: 20000
+ *         date:
+ *           type: string
+ *           format: date-time
  *     Expense:
  *       type: object
  *       required: [lorryId, type, amount]
@@ -14,35 +31,78 @@ const ProfitSummary = require('../models/ProfitSummary');
  *           example: "LH3490"
  *         type:
  *           type: string
- *           enum: [Fuel, Food, Maintenance, Other]
- *           example: "Fuel"
+ *           enum: [fuel, food, other]
+ *           example: "fuel"
  *         amount:
  *           type: number
  *           example: 5000
- *         description:
- *           type: string
- *           example: "Diesel refill at Kaduwela"
- *     ProfitSummary:
- *       type: object
- *       required: [date]
- *       properties:
  *         date:
  *           type: string
- *           format: date
- *           example: "2026-03-29"
+ *           format: date-time
+ *     DailySummary:
+ *       type: object
+ *       properties:
  *         lorryId:
  *           type: string
- *           example: "LH3490"
- *         totalIncome:
+ *         totalCash:
  *           type: number
- *           example: 75000
- *         totalExpenses:
+ *         totalCredit:
  *           type: number
- *           example: 12000
- *         netProfit:
+ *         totalExpense:
  *           type: number
- *           example: 63000
+ *         profit:
+ *           type: number
+ *         date:
+ *           type: string
+ *           format: date-time
  */
+
+// ─── TRANSACTIONS CRUD ───────────────────────────────────────────
+
+/**
+ * @swagger
+ * /transactions:
+ *   get:
+ *     summary: Get all transactions
+ *     tags: [Transactions]
+ *     responses:
+ *       200:
+ *         description: List of transactions
+ */
+exports.getAllTransactions = async (req, res) => {
+    try {
+        const transactions = await Transaction.find().sort({ date: -1 });
+        res.json(transactions);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+/**
+ * @swagger
+ * /transactions:
+ *   post:
+ *     summary: Record a new transaction
+ *     tags: [Transactions]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Transaction'
+ *     responses:
+ *       201:
+ *         description: Transaction recorded
+ */
+exports.createTransaction = async (req, res) => {
+    try {
+        const transaction = new Transaction(req.body);
+        const saved = await transaction.save();
+        res.status(201).json(saved);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
 
 // ─── EXPENSE CRUD ───────────────────────────────────────────
 
@@ -58,7 +118,7 @@ const ProfitSummary = require('../models/ProfitSummary');
  */
 exports.getAllExpenses = async (req, res) => {
     try {
-        const expenses = await Expense.find();
+        const expenses = await Expense.find().sort({ date: -1 });
         res.json(expenses);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -69,7 +129,7 @@ exports.getAllExpenses = async (req, res) => {
  * @swagger
  * /expenses:
  *   post:
- *     summary: Record a new lorry expense (fuel, food, maintenance)
+ *     summary: Record a new lorry expense (fuel, food, other)
  *     tags: [Expenses]
  *     requestBody:
  *       required: true
@@ -91,119 +151,14 @@ exports.createExpense = async (req, res) => {
     }
 };
 
-/**
- * @swagger
- * /expenses/{id}:
- *   put:
- *     summary: Update an expense record
- *     tags: [Expenses]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Expense'
- *     responses:
- *       200:
- *         description: Expense updated
- */
-exports.updateExpense = async (req, res) => {
-    try {
-        const updated = await Expense.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!updated) return res.status(404).json({ message: 'Expense not found' });
-        res.json(updated);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
-};
+// ─── DAILY SUMMARY ────────────────────────────────────────
 
 /**
  * @swagger
- * /expenses/{id}:
- *   delete:
- *     summary: Delete an expense record
- *     tags: [Expenses]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Expense deleted
- */
-exports.deleteExpense = async (req, res) => {
-    try {
-        const deleted = await Expense.findByIdAndDelete(req.params.id);
-        if (!deleted) return res.status(404).json({ message: 'Expense not found' });
-        res.json({ message: 'Expense deleted' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-};
-
-// ─── PROFIT SUMMARY ────────────────────────────────────────
-
-/**
- * @swagger
- * /profit-summary:
- *   post:
- *     summary: Generate a daily profit summary
- *     tags: [ProfitSummary]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/ProfitSummary'
- *     responses:
- *       201:
- *         description: Profit summary created
- */
-exports.createProfitSummary = async (req, res) => {
-    try {
-        const { date, lorryId, totalIncome, totalExpenses } = req.body;
-        const netProfit = totalIncome - totalExpenses;
-        const summary = new ProfitSummary({ date, lorryId, totalIncome, totalExpenses, netProfit });
-        const saved = await summary.save();
-        res.status(201).json(saved);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
-};
-
-/**
- * @swagger
- * /profit-summary:
+ * /finance/summary/{lorryId}:
  *   get:
- *     summary: Get all daily profit summaries
- *     tags: [ProfitSummary]
- *     responses:
- *       200:
- *         description: List of profit summaries
- */
-exports.getAllProfitSummaries = async (req, res) => {
-    try {
-        const summaries = await ProfitSummary.find().sort({ date: -1 });
-        res.json(summaries);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-};
-
-/**
- * @swagger
- * /profit-summary/{lorryId}:
- *   get:
- *     summary: Get profit summaries for a specific lorry
- *     tags: [ProfitSummary]
+ *     summary: Get daily summary for a specific lorry
+ *     tags: [Summary]
  *     parameters:
  *       - in: path
  *         name: lorryId
@@ -212,12 +167,39 @@ exports.getAllProfitSummaries = async (req, res) => {
  *           type: string
  *     responses:
  *       200:
- *         description: Lorry profit summaries
+ *         description: Lorry daily summary
  */
-exports.getProfitByLorry = async (req, res) => {
+exports.getSummaryByLorry = async (req, res) => {
     try {
-        const summaries = await ProfitSummary.find({ lorryId: req.params.lorryId }).sort({ date: -1 });
-        res.json(summaries);
+        const { lorryId } = req.params;
+        
+        // Calculate totals from Transactions and Expenses for today (or overall if date filtering is not strict)
+        // Since we are building a simple daily summary on the fly or fetching saved, we'll aggregate.
+        // Actually, let's aggregate all for now to show the profit calculation.
+        
+        const transactions = await Transaction.find({ lorryId });
+        const expenses = await Expense.find({ lorryId });
+
+        const totalCash = transactions.reduce((sum, t) => sum + (t.cashAmount || 0), 0);
+        const totalCredit = transactions.reduce((sum, t) => sum + (t.creditAmount || 0), 0);
+        const totalExpense = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+        
+        const profit = totalCash - totalExpense;
+
+        // Optionally, save/update a DailySummary document
+        let summary = await DailySummary.findOne({ lorryId }).sort({ date: -1 });
+        
+        if (!summary) {
+            summary = new DailySummary({ lorryId, totalCash, totalCredit, totalExpense, profit });
+        } else {
+            summary.totalCash = totalCash;
+            summary.totalCredit = totalCredit;
+            summary.totalExpense = totalExpense;
+            summary.profit = profit;
+        }
+        await summary.save();
+
+        res.json(summary);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
