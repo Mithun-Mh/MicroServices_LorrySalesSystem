@@ -13,6 +13,25 @@ const toNumber = (value) => {
     return Number.isFinite(numeric) ? numeric : NaN;
 };
 
+const normalizeLorryPayload = (body = {}) => ({
+    lorry_id: body.lorry_id || body.lorryId,
+    lorryId: body.lorryId || body.lorry_id,
+    vehicle_number: body.vehicle_number || body.vehicleNumber || body.licensePlate,
+    rep_id: body.rep_id || body.repId || body.assignedRep,
+    status: body.status
+});
+
+const toLorryResponse = (record = {}) => ({
+    _id: record._id,
+    lorryId: record.lorryId || record.lorry_id,
+    licensePlate: record.licensePlate || record.vehicle_number,
+    assignedRep: record.assignedRep || record.rep_id,
+    status: record.status,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    __v: record.__v
+});
+
 const getInventoryProductById = async (productId) => {
     const response = await fetch(`${INVENTORY_SERVICE_URL}/products/${encodeURIComponent(productId)}`);
     if (response.status === 404) {
@@ -160,8 +179,8 @@ const getCustomerByPhoneNumber = async (phoneNumber) => {
  */
 exports.getAllLorries = async (req, res) => {
     try {
-        const lorries = await Lorry.find();
-        res.json(lorries);
+        const lorries = await Lorry.find().lean();
+        res.json(lorries.map(toLorryResponse));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -185,15 +204,16 @@ exports.getAllLorries = async (req, res) => {
  */
 exports.createLorry = async (req, res) => {
     try {
-        const payload = {
-            lorry_id: req.body.lorry_id || req.body.lorryId,
-            vehicle_number: req.body.vehicle_number || req.body.vehicleNumber || req.body.licensePlate,
-            rep_id: req.body.rep_id || req.body.repId || req.body.assignedRep,
-            status: req.body.status
-        };
+        const payload = normalizeLorryPayload(req.body);
+        if (!payload.lorry_id || !payload.vehicle_number || !payload.rep_id) {
+            return res.status(400).json({
+                error: 'lorryId, licensePlate and assignedRep are required'
+            });
+        }
+
         const lorry = new Lorry(payload);
         const saved = await lorry.save();
-        res.status(201).json(saved);
+        res.status(201).json(toLorryResponse(saved.toObject()));
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
@@ -223,19 +243,18 @@ exports.createLorry = async (req, res) => {
  */
 exports.updateLorry = async (req, res) => {
     try {
+        const normalized = normalizeLorryPayload(req.body);
         const payload = {
-            ...(req.body.lorry_id || req.body.lorryId ? { lorry_id: req.body.lorry_id || req.body.lorryId } : {}),
-            ...(req.body.vehicle_number || req.body.vehicleNumber || req.body.licensePlate ? {
-                vehicle_number: req.body.vehicle_number || req.body.vehicleNumber || req.body.licensePlate
-            } : {}),
-            ...(req.body.rep_id || req.body.repId || req.body.assignedRep ? {
-                rep_id: req.body.rep_id || req.body.repId || req.body.assignedRep
-            } : {}),
-            ...(req.body.status ? { status: req.body.status } : {})
+            ...(normalized.lorry_id ? { lorry_id: normalized.lorry_id } : {}),
+            ...(normalized.lorryId ? { lorryId: normalized.lorryId } : {}),
+            ...(normalized.vehicle_number ? { vehicle_number: normalized.vehicle_number } : {}),
+            ...(normalized.rep_id ? { rep_id: normalized.rep_id } : {}),
+            ...(normalized.status ? { status: normalized.status } : {})
         };
+
         const updated = await Lorry.findByIdAndUpdate(req.params.id, payload, { new: true });
         if (!updated) return res.status(404).json({ message: 'Lorry not found' });
-        res.json(updated);
+        res.json(toLorryResponse(updated.toObject()));
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
