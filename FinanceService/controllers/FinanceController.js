@@ -1,5 +1,9 @@
+const axios = require('axios');
 const Expense = require('../models/Expense');
 const ProfitSummary = require('../models/ProfitSummary');
+
+const SALES_SERVICE_URL = process.env.SALES_SERVICE_URL || 'http://sales-service:5004';
+const FLEET_SERVICE_URL = process.env.FLEET_SERVICE_URL || 'http://fleet-service:5002';
 
 /**
  * @swagger
@@ -169,9 +173,95 @@ exports.deleteExpense = async (req, res) => {
  */
 exports.createProfitSummary = async (req, res) => {
     try {
-        const { date, lorryId, totalIncome, totalExpenses } = req.body;
+        const { date, lorryId } = req.body;
+        
+        if (!date) {
+            return res.status(400).json({ message: 'date is required' });
+        }
+
+        const targetDate = new Date(date);
+        const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
+        const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+
+        let totalIncome = 0;
+        let totalExpenses = 0;
+
+        if (lorryId) {
+            // --- Specific Lorry Profit Summary ---
+            const expenses = await Expense.find({
+                lorryId,
+                expenseDate: { $gte: startOfDay, $lte: endOfDay }
+            });
+            totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+            try {
+                const response = await axios.get(`${FLEET_SERVICE_URL}/lorry-sales`);
+                const allSales = response.data;
+                const lorrySales = allSales.filter(sale => {
+                    const saleDate = new Date(sale.createdAt);
+                    return sale.lorry_id === lorryId && saleDate >= startOfDay && saleDate <= endOfDay;
+                });
+                totalIncome = lorrySales.reduce((sum, sale) => sum + sale.total, 0);
+            } catch (err) {
+                console.error('Error fetching sales from Fleet Service:', err.message);
+            }
+        } else {
+            // --- Global Company Profit Summary ---
+            // 1. All Expenses (Warehouse + All Lorries)
+            const expenses = await Expense.find({
+                expenseDate: { $gte: startOfDay, $lte: endOfDay }
+            });
+            totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+            // 2. All Lorry Sales Income (Fleet Service)
+            try {
+                const response = await axios.get(`${FLEET_SERVICE_URL}/lorry-sales`);
+                const allSales = response.data;
+                const lorrySales = allSales.filter(sale => {
+                    const saleDate = new Date(sale.createdAt);
+                    return saleDate >= startOfDay && saleDate <= endOfDay;
+                });
+                totalIncome += lorrySales.reduce((sum, sale) => sum + sale.total, 0);
+            } catch (err) {
+                console.error('Error fetching sales from Fleet Service:', err.message);
+            }
+
+            // 3. All Direct/Warehouse Sales Income (Sales Service)
+            try {
+                const invoiceRes = await axios.get(`${SALES_SERVICE_URL}/invoices`);
+                const allInvoices = invoiceRes.data;
+                // Count Paid or Pending invoices for the day's generated income
+                const dailyInvoices = allInvoices.filter(inv => {
+                    const invDate = new Date(inv.createdAt || inv.invoiceDate);
+                    return inv.status !== 'Cancelled' && invDate >= startOfDay && invDate <= endOfDay;
+                });
+                totalIncome += dailyInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+            } catch (err) {
+                console.error('Error fetching invoices from Sales Service:', err.message);
+            }
+        }
+
+        // Allow manual overrides from request body if explicitly provided
+        if (req.body.totalExpenses !== undefined) totalExpenses = req.body.totalExpenses;
+        if (req.body.totalIncome !== undefined) totalIncome = req.body.totalIncome;
+
         const netProfit = totalIncome - totalExpenses;
-        const summary = new ProfitSummary({ date, lorryId, totalIncome, totalExpenses, netProfit });
+        
+        // Update if already exists for this day, or create new
+        const query = { date: { $gte: startOfDay, $lte: endOfDay } };
+        if (lorryId) query.lorryId = lorryId;
+        else query.lorryId = { $exists: false }; // Global summary doesn't have lorryId
+
+        let summary = await ProfitSummary.findOne(query);
+
+        if (summary) {
+            summary.totalIncome = totalIncome;
+            summary.totalExpenses = totalExpenses;
+            summary.netProfit = netProfit;
+        } else {
+            summary = new ProfitSummary({ date: startOfDay, lorryId, totalIncome, totalExpenses, netProfit });
+        }
+        
         const saved = await summary.save();
         res.status(201).json(saved);
     } catch (err) {
