@@ -12,13 +12,14 @@ const CUSTOMER_SERVICE_URL = process.env.CUSTOMER_SERVICE_URL || 'http://custome
  *   schemas:
  *     Invoice:
  *       type: object
- *       required: [invoiceNumber, customerId, customerName, lorryId, items, totalAmount, paymentMethod]
+ *       required: [invoiceNumber, customerId, customerName, items, totalAmount, paymentMethod]
  *       properties:
  *         invoiceNumber:
  *           type: string
  *           example: "INV-20260329-001"
  *         customerId:
  *           type: string
+ *           example: "CUST-001"
  *         customerName:
  *           type: string
  *           example: "Nimal Textiles"
@@ -26,9 +27,6 @@ const CUSTOMER_SERVICE_URL = process.env.CUSTOMER_SERVICE_URL || 'http://custome
  *           type: string
  *           enum: [POS, Warehouse]
  *           example: "POS"
- *         lorryId:
- *           type: string
- *           example: "LH3490"
  *         items:
  *           type: array
  *           items:
@@ -36,14 +34,19 @@ const CUSTOMER_SERVICE_URL = process.env.CUSTOMER_SERVICE_URL || 'http://custome
  *             properties:
  *               productId:
  *                 type: string
+ *                 example: "P001"
  *               productName:
  *                 type: string
+ *                 example: "Cement Bag"
  *               quantity:
  *                 type: number
+ *                 example: 50
  *               unitPrice:
  *                 type: number
+ *                 example: 500
  *               total:
  *                 type: number
+ *                 example: 25000
  *         totalAmount:
  *           type: number
  *           example: 25000

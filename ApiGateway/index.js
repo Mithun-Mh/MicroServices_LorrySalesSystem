@@ -132,11 +132,14 @@ app.use(express.json());
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, category, retail_price, wholesale_price, cost_price, barcode]
+ *             required: [name, sku, category, retail_price, wholesale_price, cost_price, barcode]
  *             properties:
  *               name:
  *                 type: string
  *                 example: Formal Shirt
+ *               sku:
+ *                 type: string
+ *                 example: SHIRT-001
  *               category:
  *                 type: string
  *                 example: Shirt
@@ -193,6 +196,8 @@ app.use(express.json());
  *             type: object
  *             properties:
  *               name:
+ *                 type: string
+ *               sku:
  *                 type: string
  *               category:
  *                 type: string
@@ -641,9 +646,6 @@ app.use(express.json());
  *                 type: string
  *               email:
  *                 type: string
- *               paymentMethod:
- *                 type: string
- *                 enum: [Cash, Card, Credit]
  *     responses:
  *       201:
  *         description: Customer created
@@ -808,25 +810,47 @@ app.use(express.json());
  *         application/json:
  *           schema:
  *             type: object
- *             required: [invoiceNumber, customerId, customerName, lorryId, items, totalAmount, paymentMethod]
+ *             required: [invoiceNumber, customerId, customerName, items, totalAmount, paymentMethod]
  *             properties:
  *               invoiceNumber:
  *                 type: string
+ *                 example: "INV-20260329-001"
  *               customerId:
  *                 type: string
+ *                 example: "CUST-001"
  *               customerName:
  *                 type: string
- *               lorryId:
- *                 type: string
+ *                 example: "Nimal Textiles"
  *               items:
  *                 type: array
  *                 items:
  *                   type: object
+ *                   properties:
+ *                     productId:
+ *                       type: string
+ *                       example: "P001"
+ *                     productName:
+ *                       type: string
+ *                       example: "Cement Bag"
+ *                     quantity:
+ *                       type: number
+ *                       example: 50
+ *                     unitPrice:
+ *                       type: number
+ *                       example: 500
+ *                     total:
+ *                       type: number
+ *                       example: 25000
  *               totalAmount:
  *                 type: number
+ *                 example: 25000
  *               paymentMethod:
  *                 type: string
  *                 enum: [Cash, Card, Credit]
+ *                 example: "Cash"
+ *               saleType:
+ *                 type: string
+ *                 enum: [POS, Warehouse]
  *     responses:
  *       201:
  *         description: Invoice created
@@ -901,13 +925,17 @@ app.use(express.json());
  *             properties:
  *               invoiceId:
  *                 type: string
+ *                 example: "665a1b2c3d4e5f6a7b8c9d0e"
  *               paymentMethod:
  *                 type: string
  *                 enum: [Cash, Card, Credit]
+ *                 example: "Cash"
  *               amountPaid:
  *                 type: number
+ *                 example: 25000
  *               reference:
  *                 type: string
+ *                 example: "CASH-REC-001"
  *     responses:
  *       201:
  *         description: Transaction recorded
