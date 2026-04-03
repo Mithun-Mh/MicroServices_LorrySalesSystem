@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Product = require('../models/Product');
 const WarehouseStock = require('../models/WarehouseStock');
 const DamagedItem = require('../models/DamagedItem');
@@ -292,8 +293,17 @@ exports.updateStock = async (req, res) => {
             return res.status(400).json({ message: "Action must be 'increase' or 'reduce'" });
         }
         
-        let stock = await WarehouseStock.findOne({ product_id });
-        if (!stock) return res.status(404).json({ message: 'Stock not found for this product' });
+        let productIdToUse = product_id;
+        
+        // If the provided product_id is not a valid ObjectId, try to find the product by SKU
+        if (!mongoose.Types.ObjectId.isValid(product_id)) {
+            const product = await Product.findOne({ sku: product_id });
+            if (!product) return res.status(404).json({ message: `Product not found with SKU/ID: ${product_id}` });
+            productIdToUse = product._id;
+        }
+
+        let stock = await WarehouseStock.findOne({ product_id: productIdToUse });
+        if (!stock) return res.status(404).json({ message: 'Stock record not found for this product' });
 
         if (action === 'increase') {
             stock.quantity += quantity;
@@ -372,8 +382,17 @@ exports.getAllDamaged = async (req, res) => {
 exports.recordDamaged = async (req, res) => {
     try {
         const { product_id, quantity, reason } = req.body;
+        let productIdToUse = product_id;
+
+        // Support for SKU lookup
+        if (!mongoose.Types.ObjectId.isValid(product_id)) {
+            const product = await Product.findOne({ sku: product_id });
+            if (!product) return res.status(404).json({ message: `Product not found with SKU/ID: ${product_id}` });
+            productIdToUse = product._id;
+        }
+
         // Reduce stock from WarehouseStock
-        const stock = await WarehouseStock.findOne({ product_id });
+        const stock = await WarehouseStock.findOne({ product_id: productIdToUse });
         if (!stock) return res.status(404).json({ message: 'Stock not found' });
         if (stock.quantity < quantity) {
             return res.status(400).json({ message: 'Not enough stock to record as damaged' });
@@ -381,7 +400,7 @@ exports.recordDamaged = async (req, res) => {
         stock.quantity -= quantity;
         await stock.save();
 
-        const damaged = new DamagedItem({ product_id, quantity, reason });
+        const damaged = new DamagedItem({ product_id: productIdToUse, quantity, reason });
         const saved = await damaged.save();
         res.status(201).json({ message: 'Damaged item recorded, stock reduced', damaged: saved, remainingStock: stock.quantity });
     } catch (err) {
